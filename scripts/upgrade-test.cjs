@@ -9,6 +9,7 @@ const { createHash, randomUUID } = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const assert = require("node:assert/strict");
 const lifecycle = require("./fixture-lifecycle.cjs");
+const { waitFor } = require("./wait-for.cjs");
 const { ModelStore } = require("../src/models.cjs");
 const { MODELS } = require("../src/catalog.cjs");
 const { version: baseVersion } = require("../package.json");
@@ -20,15 +21,6 @@ async function hash(file) {
   const digest = createHash("sha256");
   for await (const chunk of createReadStream(file)) digest.update(chunk);
   return digest.digest("hex");
-}
-async function waitFor(operation, description, timeout = 90000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const value = await operation();
-    if (value) return value;
-    await new Promise((resolve) => setTimeout(resolve, 150));
-  }
-  throw Error(description + " timed out. Inspect the native updater logs.");
 }
 function processesIn(directory) {
   return execFileSync("/bin/ps", ["-axww", "-o", "pid=,uid=,comm="], {
@@ -313,27 +305,19 @@ async function bundleVersion(apps) {
     await page
       .getByRole("button", { name: "Check for updates", exact: true })
       .click();
-    await page.waitForFunction(async (version) => {
+    await waitFor(() => page.evaluate(async (version) => {
       const state = await window.companion.call("state");
       if (state.updates.status === "error") throw Error(state.updates.message);
-      return (
-        state.updates.status === "available" &&
-        state.updates.availableVersion === version
-      );
-    }, targetVersion);
-    await page
-      .getByRole("button", { name: "Download update", exact: true })
-      .click();
-    await page.waitForFunction(
-      async () => {
-        const state = await window.companion.call("state");
-        if (state.updates.status === "error")
-          throw Error(state.updates.message);
-        return state.updates.status === "downloaded";
-      },
-      null,
-      { timeout: 120000 },
-    );
+      return state.updates.status === "available" && state.updates.availableVersion === version;
+    }, targetVersion), "Published update availability", 30000);
+    assert.equal(await page.getByRole("button", { name: "Restart to update", exact: true }).isDisabled(), true);
+    await page.getByRole("button", { name: "Download update", exact: true }).click();
+    await waitFor(() => page.evaluate(async () => {
+      const state = await window.companion.call("state");
+      if (state.updates.status === "error") throw Error(state.updates.message);
+      return state.updates.status === "downloaded";
+    }), "Verified update download", 120000);
+    assert.equal(await page.getByRole("button", { name: "Restart to update", exact: true }).isEnabled(), true);
     owned = lifecycle.capture(handle);
     await page
       .getByRole("button", { name: "Restart to update", exact: true })

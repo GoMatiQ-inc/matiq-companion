@@ -1,4 +1,5 @@
 const lifecycle = require("./fixture-lifecycle.cjs");
+const { waitFor } = require("./wait-for.cjs");
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -58,11 +59,10 @@ const assert = require("node:assert/strict");
     assert.equal(await page.getByRole("checkbox").count(), 4);
     await page.getByRole("checkbox", { name: "Word and Excel" }).check();
     const state = await page.evaluate(() => window.companion.call("state"));
-    await page.waitForFunction(
-      async (id) =>
-        (await window.companion.call("project.open", { id })).tools.documents,
+    await waitFor(() => page.evaluate(
+      async (id) => (await window.companion.call("project.open", { id })).tools.documents,
       state.projects[0].id,
-    );
+    ), "Project permission persistence", 10000);
     const p = await page.evaluate(
       (id) => window.companion.call("project.open", { id }),
       state.projects[0].id,
@@ -99,6 +99,9 @@ const assert = require("node:assert/strict");
       );
     }
     await page.screenshot({ path: ".validation/companion-chat.png" });
+    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    assert.equal(await page.getByRole("button", { name: "Download update", exact: true }).isDisabled(), true);
+    assert.equal(await page.getByRole("button", { name: "Restart to update", exact: true }).isDisabled(), true);
     console.log(
       "PASS: real Electron navigation, project persistence, independent tool toggles and model setup screen.",
     );

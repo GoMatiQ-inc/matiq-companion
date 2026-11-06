@@ -236,19 +236,19 @@ function render() {
       el("h2", "Application updates"),
       el("p", `Installed version ${snapshot.version}. ${u.message}`),
     );
-    panel.append(
-      actions(
-        button("Check for updates", async () => {
-          updateState = await call("update.check");
-          render();
-        }),
-        button("Download update", async () => {
-          updateState = await call("update.download");
-          render();
-        }),
-        button("Restart to update", () => call("update.install"), true),
-      ),
-    );
+    const checkUpdate = button("Check for updates", async () => {
+      updateState = await call("update.check");
+      render();
+    });
+    const downloadUpdate = button("Download update", async () => {
+      updateState = await call("update.download");
+      render();
+    });
+    const restartUpdate = button("Restart to update", () => call("update.install"), true);
+    checkUpdate.disabled = ["development", "checking", "downloading", "downloaded"].includes(u.status);
+    downloadUpdate.disabled = u.status !== "available";
+    restartUpdate.disabled = u.status !== "downloaded";
+    panel.append(actions(checkUpdate, downloadUpdate, restartUpdate));
     root.append(
       panel,
       el(

@@ -51,3 +51,23 @@ test("development builds cannot pretend to install updates", async () => {
   await assert.rejects(c.check(), /installed release/);
   assert.throws(() => c.install(), /Download/);
 });
+
+test("pending downloads block duplicate downloads and restart until completion", async () => {
+  const updater = new EventEmitter();
+  let finish;
+  updater.checkForUpdates = async () => updater.emit("update-available", { version: "0.2.0" });
+  updater.downloadUpdate = () => new Promise((resolve) => { finish = () => { updater.emit("update-downloaded"); resolve(); }; });
+  let restarts = 0;
+  updater.quitAndInstall = () => restarts++;
+  const updates = configureUpdates({ isPackaged: true, getVersion: () => "0.1.0" }, () => {}, updater);
+  await updates.check();
+  const download = updates.download();
+  assert.equal(updates.state.status, "downloading");
+  assert.throws(() => updates.install(), /Download the update first/);
+  await assert.rejects(updates.download(), /Check for an available update first/);
+  assert.equal(restarts, 0);
+  finish();
+  await download;
+  updates.install();
+  assert.equal(restarts, 1);
+});

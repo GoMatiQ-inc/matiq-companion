@@ -56,7 +56,13 @@ function configureUpdates(app, emit, providedUpdater) {
     download: async () => {
       if (state.status !== "available")
         throw Error("Check for an available update first.");
-      await updater.downloadUpdate();
+      change({ status: "downloading", percent: 0, message: "Downloading update…" });
+      try {
+        await updater.downloadUpdate();
+      } catch (error) {
+        change({ status: "error", message: error.message });
+        throw error;
+      }
       return state;
     },
     install: () => {
