@@ -37,7 +37,7 @@ const {execFileSync}=require('node:child_process');
           assert.equal(changed.words.filter(w=>/^yes$/i.test(w.text)).length,yes.length-1,'The optional CI privacy switch did not turn off. Inspect before continuing.');
           desktopPreparation.togglesDisabled++;setup=changed;
         } else {
-          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text)) || (desktopPreparation.pages===0 && desktopPreparation.togglesDisabled===2 ? {x:867,y:656} : null);
+          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text) && w.x>setup.width*0.7 && w.y>setup.height*0.75) || (desktopPreparation.pages===0 && desktopPreparation.togglesDisabled===2 ? {x:867,y:656} : null);
           assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing: '+JSON.stringify(setup.words.map(w=>w.text)));
           await act('click_screen',{x:next.x,y:next.y});desktopPreparation.pages++;
           setup=await act('observe_screen');
