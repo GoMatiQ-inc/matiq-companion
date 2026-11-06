@@ -3,6 +3,7 @@
 #include <cmath>
 #include <vector>
 #include <unistd.h>
+#import <AppKit/AppKit.h>
 
 static napi_value Fail(napi_env env, const char* message) { napi_throw_error(env, nullptr, message); return nullptr; }
 static napi_value Done(napi_env env) { napi_value value; napi_get_undefined(env, &value); return value; }
@@ -50,18 +51,20 @@ static napi_value Click(napi_env env, napi_callback_info info) {
 }
 static napi_value Foreground(napi_env env,napi_callback_info) {
   if(!Allowed(env))return nullptr;
-  AXUIElementRef system=AXUIElementCreateSystemWide();CFTypeRef application=nullptr;
-  AXError error=AXUIElementCopyAttributeValue(system,kAXFocusedApplicationAttribute,&application);CFRelease(system);
-  pid_t pid=0;if(error==kAXErrorSuccess&&application){AXUIElementGetPid(static_cast<AXUIElementRef>(const_cast<void*>(application)),&pid);CFRelease(application);}
-  napi_value value;napi_create_int32(env,pid,&value);return value;
+  @autoreleasepool {
+    napi_value value;napi_create_int32(env,NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier,&value);return value;
+  }
 }
 static napi_value Focus(napi_env env,napi_callback_info info) {
   if(!Allowed(env))return nullptr;
   size_t count=1;napi_value arg;int32_t pid=0;napi_get_cb_info(env,info,&count,&arg,nullptr,nullptr);
   if(count!=1||napi_get_value_int32(env,arg,&pid)!=napi_ok||pid<=0||pid==getpid())return Fail(env,"Click the other application's target field, then observe again before keyboard input.");
-  AXUIElementRef application=AXUIElementCreateApplication(pid);
-  AXError error=AXUIElementSetAttributeValue(application,kAXFrontmostAttribute,kCFBooleanTrue);CFRelease(application);
-  if(error!=kAXErrorSuccess)return Fail(env,"macOS could not restore the clicked application. Click its field and observe again.");return Done(env);
+  @autoreleasepool {
+    if(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier==pid)return Done(env);
+    NSRunningApplication* application=[NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+    if(!application || application.terminated || ![application activateWithOptions:NSApplicationActivateIgnoringOtherApps])return Fail(env,"macOS could not restore the clicked application. Click its field and observe again.");
+  }
+  return Done(env);
 }
 static napi_value Init(napi_env env,napi_value exports) {
   napi_property_descriptor methods[]={ {"foreground",nullptr,Foreground,nullptr,nullptr,nullptr,napi_default,nullptr}, {"focus",nullptr,Focus,nullptr,nullptr,nullptr,napi_default,nullptr}, {"type",nullptr,Type,nullptr,nullptr,nullptr,napi_default,nullptr}, {"key",nullptr,Key,nullptr,nullptr,nullptr,napi_default,nullptr}, {"click",nullptr,Click,nullptr,nullptr,nullptr,napi_default,nullptr} };

@@ -20,7 +20,7 @@ for (const fixture of ["desktop-test.cjs", "computer-test.cjs"]) {
   const result = spawnSync(process.execPath, [path.join(__dirname, fixture)], {
     env: { ...process.env, COMPANION_EXECUTABLE_PATH: executable },
     stdio: "inherit",
-    timeout: 120000,
+    timeout: 180000,
   });
   if (result.error) throw result.error;
   if (result.status !== 0) throw Error(`Packaged ${fixture} failed (${result.status ?? result.signal}).`);

@@ -4,10 +4,11 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const assert = require('node:assert/strict');
+const {execFileSync}=require('node:child_process');
 (async()=>{
   const profile=await fs.mkdtemp(path.join(os.tmpdir(),'companion-computer-'));
   let app,target,ownedApp,ownedTarget;
-  const timer=setTimeout(()=>{app?.process().kill();target?.process().kill();process.exitCode=1;},90000);
+  const timer=setTimeout(()=>{app?.process().kill();target?.process().kill();process.exitCode=1;},150000);
   try {
     app=await electron.launch({executablePath:process.env.COMPANION_EXECUTABLE_PATH||undefined,args:process.env.COMPANION_EXECUTABLE_PATH?[]:[path.resolve(__dirname,'..')],env:{...process.env,COMPANION_TEST_PROFILE:profile}});
     ownedApp=lifecycle.capture(app.process());
@@ -16,7 +17,17 @@ const assert = require('node:assert/strict');
     const entry=path.join(profile,'target.cjs');
     const html='<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">Verify</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>';
     await fs.writeFile(entry,`const {app,BrowserWindow,screen}=require('electron');if(process.platform==='win32'&&process.arch==='arm64')app.disableHardwareAcceleration();app.setName('Companion Input Target');app.setPath('userData',${JSON.stringify(path.join(profile,'target-profile'))});app.whenReady().then(async()=>{const area=screen.getPrimaryDisplay().workArea;const window=new BrowserWindow({width:800,height:600,x:area.x+40,y:area.y+60,alwaysOnTop:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});await window.loadURL('data:text/html,'+encodeURIComponent(${JSON.stringify(html)}));window.show();app.focus({steal:true});window.focus();});app.on('window-all-closed',()=>app.quit());`);
-    target=await electron.launch({executablePath:require('electron'),args:[entry]});
+    let targetExecutable=require('electron');
+    if(process.platform==='darwin') {
+      const bundle=path.resolve(targetExecutable,'../../..'),copy=path.join(profile,'Companion Input Target.app');
+      execFileSync('/usr/bin/ditto',[bundle,copy],{timeout:90000});
+      const plist=path.join(copy,'Contents/Info.plist');
+      execFileSync('/usr/bin/plutil',['-replace','CFBundleIdentifier','-string','com.matiq.companion.input-fixture',plist],{timeout:15000});
+      execFileSync('/usr/bin/codesign',['--force','--deep','--sign','-','--timestamp=none',copy],{timeout:90000});
+      assert.equal(execFileSync('/usr/bin/plutil',['-extract','CFBundleIdentifier','raw','-o','-',plist],{encoding:'utf8'}).trim(),'com.matiq.companion.input-fixture');
+      targetExecutable=path.join(copy,'Contents/MacOS/Electron');
+    }
+    target=await electron.launch({executablePath:targetExecutable,args:[entry]});
     ownedTarget=lifecycle.capture(target.process());
     assert.notEqual(ownedTarget.pid,ownedApp.pid);
     const page=await target.firstWindow();

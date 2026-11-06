@@ -98,3 +98,11 @@ that application through Accessibility and verifies activation before posting
 keys. Initial keyboard input requires clicking the target field first. This
 new binding requires native qualification; the earlier in-process pass did not
 cover it.
+
+The Mac target now has a distinct fixture bundle identity instead of sharing
+Electron's development bundle ID with Companion. Its copied vendor runtime is
+ad-hoc signed only for the disposable test target; it is never a release asset.
+The production adapter uses NSWorkspace/NSRunningApplication for PID lookup and
+activation, followed by an actual foreground-PID check. Accessibility permission
+is still required before posting input. Both fixture processes and the copied
+bundle remain covered by bounded cleanup.
