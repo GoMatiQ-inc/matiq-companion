@@ -27,7 +27,7 @@ try {
     step='type-password';events.keystroke('a',{using:['command down']});events.keystroke(config.password);
     $.NSThread.sleepForTimeInterval(0.3);
     if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('Authorization lost field focus before submission.');
-    step='submit';button.click();result={authorizationSubmitted:true};
+    step='submit';const passwordLength=String(fields[1].value()||'').length;events.keyCode(36);result={authorizationSubmitted:true,passwordLength};
   }
 } catch(error) {result={error:step,number:Number(error.errorNumber||error.number)||null};}
 JSON.stringify(result);
