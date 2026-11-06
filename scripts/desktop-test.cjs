@@ -1,3 +1,4 @@
+const lifecycle = require("./fixture-lifecycle.cjs");
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
 const path = require("node:path");
@@ -25,7 +26,7 @@ const assert = require("node:assert/strict");
       );
     }
   }
-  let app;
+  let app, owned;
   const watchdog = setTimeout(() => {
     app?.process().kill("SIGKILL");
     process.exitCode = 1;
@@ -39,6 +40,7 @@ const assert = require("node:assert/strict");
       env: { ...process.env, COMPANION_TEST_PROFILE: profile },
     });
     const page = await app.firstWindow();
+    owned = lifecycle.capture(app.process());
     await page
       .getByRole("heading", { name: "Your own AI workspace." })
       .waitFor();
@@ -102,6 +104,7 @@ const assert = require("node:assert/strict");
     );
   } finally {
     await app?.close();
+    await lifecycle.verifyStopped(owned);
     clearTimeout(watchdog);
     await fs.rm(profile, { recursive: true, force: true });
   }

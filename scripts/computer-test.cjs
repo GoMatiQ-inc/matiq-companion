@@ -1,3 +1,4 @@
+const lifecycle = require("./fixture-lifecycle.cjs");
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
 const os = require("node:os");
@@ -7,7 +8,7 @@ const assert = require("node:assert/strict");
   const profile = await fs.mkdtemp(
     path.join(os.tmpdir(), "companion-computer-"),
   );
-  let app, processHandle;
+  let app, processHandle, owned;
   const timer = setTimeout(() => {
     app?.process().kill("SIGKILL");
     process.exitCode = 1;
@@ -18,6 +19,7 @@ const assert = require("node:assert/strict");
       env: { ...process.env, COMPANION_TEST_PROFILE: profile },
     });
     processHandle = app.process();
+    owned = lifecycle.capture(processHandle);
     app.on("console", (m) => console.log("Electron:", m.text()));
     await app.firstWindow();
     const result = await app.evaluate(
@@ -76,6 +78,7 @@ const assert = require("node:assert/strict");
     );
   } finally {
     await app?.close();
+    await lifecycle.verifyStopped(owned);
     clearTimeout(timer);
     if (app)
       assert.ok(
