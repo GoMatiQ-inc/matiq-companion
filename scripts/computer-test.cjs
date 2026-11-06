@@ -7,11 +7,11 @@ const assert = require('node:assert/strict');
 const {execFileSync}=require('node:child_process');
 (async()=>{
   const profile=await fs.mkdtemp(path.join(os.tmpdir(),'companion-computer-'));
-  let app,target,ownedApp,ownedTarget;
-  const timer=setTimeout(()=>{app?.process().kill();target?.process().kill();process.exitCode=1;},150000);
+  let app,target,ownedApp,ownedTarget,appHandle,targetHandle;
+  const timer=setTimeout(()=>{appHandle?.kill();targetHandle?.kill();process.exitCode=1;},150000);
   try {
     app=await electron.launch({executablePath:process.env.COMPANION_EXECUTABLE_PATH||undefined,args:process.env.COMPANION_EXECUTABLE_PATH?[]:[path.resolve(__dirname,'..')],env:{...process.env,COMPANION_TEST_PROFILE:profile}});
-    ownedApp=lifecycle.capture(app.process());
+    appHandle=app.process();ownedApp=lifecycle.capture(appHandle);
     const main=await app.firstWindow();
     await main.getByRole('heading',{name:'Your own AI workspace.'}).waitFor();
     await app.evaluate(({app,BrowserWindow,desktopCapturer,screen})=>{
@@ -67,7 +67,7 @@ const {execFileSync}=require('node:child_process');
       targetExecutable=path.join(copy,'Contents/MacOS/Electron');
     }
     target=await electron.launch({executablePath:targetExecutable,args:[entry]});
-    ownedTarget=lifecycle.capture(target.process());
+    targetHandle=target.process();ownedTarget=lifecycle.capture(targetHandle);
     assert.notEqual(ownedTarget.pid,ownedApp.pid);
     const page=await target.firstWindow();
     await page.getByText('Companion computer verification',{exact:true}).waitFor();
