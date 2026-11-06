@@ -14,7 +14,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     env:
-      COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
       CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
       CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
@@ -34,8 +33,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:inference
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:tools
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:desktop
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npx --no-install electron-builder --config scripts/release-config.cjs --publish never
       - uses: actions/upload-artifact@v4
         with:

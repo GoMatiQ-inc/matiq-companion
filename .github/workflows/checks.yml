@@ -17,7 +17,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
-      COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -28,8 +27,14 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run test:inference
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:tools
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:desktop
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run package
       - uses: actions/upload-artifact@v4
         with:
