@@ -44,27 +44,8 @@ static napi_value Focus(napi_env e,napi_callback_info info){
  if(!SetForegroundWindow(window)&&GetForegroundWindow()!=window)return Fail(e,"Windows could not restore the observed window. Click its field and observe again.");
  return Done(e);
 }
-static napi_value Capture(napi_env e,napi_callback_info){
- auto previous=SetThreadDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
- int width=GetSystemMetrics(SM_CXSCREEN),height=GetSystemMetrics(SM_CYSCREEN);
- size_t bytes=static_cast<size_t>(width)*height*4;
- if(width<1||height<1||width>8192||height>8192||bytes>128*1024*1024){if(previous)SetThreadDpiAwarenessContext(previous);return Fail(e,"Use a primary display no larger than 128 MiB of screen pixels.");}
- HDC source=GetDC(nullptr),memory=source?CreateCompatibleDC(source):nullptr;
- BITMAPINFO format{};format.bmiHeader.biSize=sizeof(BITMAPINFOHEADER);format.bmiHeader.biWidth=width;format.bmiHeader.biHeight=-height;format.bmiHeader.biPlanes=1;format.bmiHeader.biBitCount=32;format.bmiHeader.biCompression=BI_RGB;
- void* pixels=nullptr;HBITMAP bitmap=memory?CreateDIBSection(memory,&format,DIB_RGB_COLORS,&pixels,nullptr,0):nullptr;
- HGDIOBJ original=bitmap?SelectObject(memory,bitmap):nullptr;
- BOOL captured=bitmap&&original&&BitBlt(memory,0,0,width,height,source,0,0,SRCCOPY|CAPTUREBLT);
- napi_value result=nullptr;
- if(captured){
-  auto data=static_cast<uint8_t*>(pixels);for(size_t i=3;i<bytes;i+=4)data[i]=255;
-  napi_value buffer,w,h;napi_create_object(e,&result);napi_create_buffer_copy(e,bytes,pixels,nullptr,&buffer);napi_create_int32(e,width,&w);napi_create_int32(e,height,&h);
-  napi_set_named_property(e,result,"pixels",buffer);napi_set_named_property(e,result,"width",w);napi_set_named_property(e,result,"height",h);
- }
- if(original)SelectObject(memory,original);if(bitmap)DeleteObject(bitmap);if(memory)DeleteDC(memory);if(source)ReleaseDC(nullptr,source);if(previous)SetThreadDpiAwarenessContext(previous);
- if(!captured)return Fail(e,"Windows could not capture the primary desktop. Unlock the normal user desktop and retry.");return result;
-}
 static napi_value Init(napi_env e,napi_value exports){napi_property_descriptor methods[]={
- {"capture",nullptr,Capture,nullptr,nullptr,nullptr,napi_default,nullptr},{"type",nullptr,Type,nullptr,nullptr,nullptr,napi_default,nullptr},{"key",nullptr,Key,nullptr,nullptr,nullptr,napi_default,nullptr},
+ {"type",nullptr,Type,nullptr,nullptr,nullptr,napi_default,nullptr},{"key",nullptr,Key,nullptr,nullptr,nullptr,napi_default,nullptr},
  {"click",nullptr,Click,nullptr,nullptr,nullptr,napi_default,nullptr},{"foreground",nullptr,Foreground,nullptr,nullptr,nullptr,napi_default,nullptr},{"focus",nullptr,Focus,nullptr,nullptr,nullptr,napi_default,nullptr}};
- napi_define_properties(e,exports,6,methods);return exports;}
+ napi_define_properties(e,exports,5,methods);return exports;}
 NAPI_MODULE(companion_windows,Init)

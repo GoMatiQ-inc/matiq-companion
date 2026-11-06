@@ -84,3 +84,10 @@ This tests the hypothesis that the ARM runner's Electron thumbnail is stale;
 no OS privacy choice or account setting is changed. It still requires the normal
 interactive desktop. The temporary UI inspection job was removed after retaining
 its result in run 42251526886; new native capture needs actual qualification.
+
+The GDI experiment in 42252130336 returned the same initial setup frame on ARM,
+so it did not establish an Electron-thumbnail bug and the experimental adapter
+was reverted. The next fixture uses a software renderer on the ARM virtual
+runner and permits one observed activation click before requiring field focus.
+Both native clicks still require a fresh observation; receiving text and button
+activation in the separate process remain mandatory assertions.

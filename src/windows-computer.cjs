@@ -21,9 +21,4 @@ async function windowsInput(action, args, display, signal, target) {
   if (signal?.aborted) throw Error("Task stopped.");
   if (chunk) input.type(chunk);
 }
-function captureScreen() {
-  const frame=native().capture();
-  const ratio=Math.min(1,1920/frame.width,1200/frame.height);
-  return require('electron').nativeImage.createFromBitmap(frame.pixels,{width:frame.width,height:frame.height}).resize({width:Math.round(frame.width*ratio),height:Math.round(frame.height*ratio)});
-}
-module.exports = { windowsInput, foregroundWindow, captureScreen };
+module.exports = { windowsInput, foregroundWindow };
