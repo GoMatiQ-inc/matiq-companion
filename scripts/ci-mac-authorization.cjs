@@ -16,7 +16,7 @@ function createAuthorizationFixture(){
     async authorize(){
       await waitFor(()=>{
         const result=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript',script],{input:JSON.stringify({name:identity.name,password}),encoding:'utf8',timeout:12000}));
-        if(result.error)throw Error(`Native CI helper authorization failed at ${result.error}; inspect the captured OS dialog.`);
+        if(result.error)throw Error(`Native CI helper authorization failed at ${result.error} (${result.number??'unknown'}); inspect the captured OS dialog.`);
         return result.authorizationSubmitted;
       },'The normal Companion Add Helper authorization dialog',30000);
       console.log('Native OS helper authorization was submitted using the owned CI identity.');

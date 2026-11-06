@@ -17,18 +17,17 @@ try {
     if(!texts.includes('MatiQ Companion')||!texts.some(text=>text.includes('An update is ready to install.'))||!texts.some(text=>text.includes('new helper tool')))throw Error('Unexpected authorization request.');
     const fields=window.textFields(),button=window.buttons.byName('Add Helper');
     if(fields.length!==2||!button.exists())throw Error('Inspect the changed authorization layout.');
-    agent.frontmost=true;
-    step='focus-user';fields[0].attributes.byName('AXFocused').value=true;
-    if(!agent.frontmost()||!fields[0].attributes.byName('AXFocused').value())throw Error('The owned user field is not focused.');
+    step='focus-user';fields[0].click();
+    if(fields[0].attributes.byName('AXFocused').value()!==true)throw Error('The owned user field is not focused.');
     step='type-user';events.keystroke('a',{using:['command down']});events.keystroke(config.name);
     $.NSThread.sleepForTimeInterval(0.2);
     if(fields[0].value()!==config.name)throw Error('The fixture identity was not entered.');
-    step='focus-password';fields[1].attributes.byName('AXFocused').value=true;
-    if(!agent.frontmost()||!fields[1].attributes.byName('AXFocused').value())throw Error('The owned password field is not focused.');
+    step='focus-password';fields[1].click();
+    if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('The owned password field is not focused.');
     step='type-password';events.keystroke('a',{using:['command down']});events.keystroke(config.password);
     $.NSThread.sleepForTimeInterval(0.3);
-    if(!agent.frontmost())throw Error('Authorization lost focus before submission.');
+    if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('Authorization lost field focus before submission.');
     step='submit';button.click();result={authorizationSubmitted:true};
   }
-} catch(error) {result={error:step,number:Number(error.errorNumber)||null};}
+} catch(error) {result={error:step,number:Number(error.errorNumber||error.number)||null};}
 JSON.stringify(result);
