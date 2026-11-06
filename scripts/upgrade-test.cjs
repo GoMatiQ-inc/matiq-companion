@@ -40,6 +40,7 @@ function processesIn(directory) {
       const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line);
       if (!match) return [];
       let executable = match[3];
+      if (!executable.startsWith(directory + path.sep)) return [];
       try {
         executable = realpathSync(executable);
       } catch (error) {
