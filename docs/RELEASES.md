@@ -1,0 +1,14 @@
+# Installers, releases and updates
+
+`npm run package` builds a macOS DMG plus ZIP or a Windows NSIS installer. The ZIP and update metadata are required by the macOS updater; Windows needs the NSIS installer, blockmap and latest YAML. Release assets must remain together on the matching versioned GitHub release. Replacing a model does not require an app update.
+
+Updates are user initiated: Settings → check → download → restart to update. Automatic background downloads and automatic install-on-quit are disabled. Restart is blocked while a chat or model download is active. Development checkouts report that updates are unavailable. Projects and models are stored outside the installed app, and Windows uninstall preserves application data by default.
+
+## Qualification before publishing
+
+1. Pass unit tests, real inference, renderer/IPC and package checks on each supported native platform/architecture. Test macOS Apple Silicon and Windows x64 first; Intel Mac/Windows ARM are not yet qualified.
+2. Configure dedicated code-signing credentials through the repository's protected `release` environment. macOS requires Developer ID signing and notarization; Windows requires a trusted code-signing identity. No credentials are committed or copied from another app.
+3. Publish a signed prerelease, install it on clean native machines, then publish the next signed prerelease and verify check/download/restart plus project/model preservation. Check tampered/untrusted assets fail and interrupted downloads recover visibly.
+4. Promote only after that real two-version upgrade succeeds. Unit tests of updater events do not prove installer trust or OS integration.
+
+The `checks` workflow builds unsigned development installer artifacts for review. It never publishes releases or enables unattended user upgrades. The repository currently has no configured signing secrets; public update release publication remains a qualification gate. Do not mark a source commit as a shipped update.

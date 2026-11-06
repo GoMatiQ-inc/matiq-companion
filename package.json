@@ -1,0 +1,94 @@
+{
+  "name": "matiq-companion",
+  "productName": "MatiQ Companion",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local AI workspace by MatiQ Solutions.",
+  "author": "MatiQ Inc",
+  "main": "src/main.cjs",
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/*.test.cjs",
+    "test:desktop": "node scripts/desktop-test.cjs",
+    "test:inference": "node scripts/inference-test.mjs",
+    "package": "electron-builder --publish never",
+    "package:dir": "electron-builder --dir --publish never"
+  },
+  "dependencies": {
+    "@nut-tree-fork/nut-js": "4.2.6",
+    "@tesseract.js-data/eng": "1.0.0",
+    "@xmldom/xmldom": "0.9.12",
+    "adm-zip": "0.6.1",
+    "docx": "9.15.2",
+    "electron-updater": "6.8.9",
+    "exceljs": "4.4.0",
+    "node-llama-cpp": "3.22.3",
+    "tesseract.js": "6.0.1"
+  },
+  "devDependencies": {
+    "electron": "45.2.3",
+    "electron-builder": "26.18.0",
+    "playwright": "1.64.1"
+  },
+  "build": {
+    "appId": "com.matiq.companion",
+    "asar": true,
+    "files": [
+      "src/**/*",
+      "package.json",
+      "LICENSE",
+      "NOTICE",
+      "docs/MODELS.md"
+    ],
+    "asarUnpack": [
+      "node_modules/node-llama-cpp/**/*",
+      "node_modules/@node-llama-cpp/**/*",
+      "node_modules/**/*.node",
+      "node_modules/**/*.dll",
+      "node_modules/**/*.dylib",
+      "node_modules/**/*.so*",
+      "node_modules/@tesseract.js-data/**/*",
+      "node_modules/tesseract.js-core/**/*"
+    ],
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity",
+      "hardenedRuntime": true,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "extendInfo": {
+        "NSScreenCaptureUsageDescription": "MatiQ Companion reads the selected screen only after you approve a computer observation.",
+        "NSAppleEventsUsageDescription": "MatiQ Companion controls apps only for approved computer actions."
+      },
+      "artifactName": "MatiQ-Companion-${version}-mac-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "MatiQ-Companion-${version}-windows-${arch}.${ext}",
+      "publisherName": "MatiQ Inc"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": false,
+      "createDesktopShortcut": false
+    },
+    "directories": {
+      "output": "dist"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "GoMatiQ-inc",
+        "repo": "matiq-companion"
+      }
+    ]
+  }
+}

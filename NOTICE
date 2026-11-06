@@ -1,0 +1,7 @@
+MatiQ Companion by MatiQ Inc / MatiQ Solutions.
+Third-party code and model weights retain their respective licenses.
+The Solutions wordmark is MatiQ artwork, not an independently licensed trademark grant.
+Model catalog: Qwen3 GGUF artifacts published by Qwen under Apache-2.0.
+Inference: node-llama-cpp / llama.cpp (MIT); docx (MIT); ExcelJS (MIT);
+nut.js fork (Apache-2.0); Tesseract.js and language data (Apache-2.0).
+See the exact pinned dependencies and upstream notices in installed packages.
