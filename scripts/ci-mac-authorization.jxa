@@ -17,6 +17,7 @@ try {
     if(!texts.includes('MatiQ Companion')||!texts.some(text=>text.includes('An update is ready to install.'))||!texts.some(text=>text.includes('new helper tool')))throw Error('Unexpected authorization request.');
     const fields=window.textFields(),button=window.buttons.byName('Add Helper');
     if(fields.length!==2||!button.exists())throw Error('Inspect the changed authorization layout.');
+    if(config.mode!=='inspect'){
     step='focus-user';agent.frontmost=true;$.NSThread.sleepForTimeInterval(0.3);fields[0].attributes.byName('AXFocused').value=true;$.NSThread.sleepForTimeInterval(0.2);
     if(fields[0].attributes.byName('AXFocused').value()!==true)throw Error('The owned user field is not focused.');
     step='type-user';events.keystroke('a',{using:['command down']});events.keystroke(config.name);
@@ -30,7 +31,10 @@ try {
     if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('Authorization lost field focus before submission.');
     step='verify-password';if(String(fields[1].value()||'').length!==config.password.length)throw Error('The masked native field has an unexpected character count.');
     step='commit-password';events.keyCode(48);$.NSThread.sleepForTimeInterval(0.3);
-    step='locate-submit';const position=button.position(),size=button.size();result={readyToSubmit:true,point:[position[0]+size[0]/2,position[1]+size[1]/2],securityAgentPid:agent.unixId(),passwordLength:config.password.length};
+    }
+    step='verify-submit';const unchanged=fields[0].value()===config.name&&String(fields[1].value()||'').length===config.password.length;
+    if(!unchanged)result={readyToSubmit:false};
+    else {const position=button.position(),size=button.size();result={readyToSubmit:button.enabled(),point:[position[0]+size[0]/2,position[1]+size[1]/2],securityAgentPid:agent.unixId(),passwordLength:config.password.length};}
   }
 } catch(error) {result={error:step,number:Number(error.errorNumber||error.number)||null};}
 JSON.stringify(result);

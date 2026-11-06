@@ -19,13 +19,18 @@ function createAuthorizationFixture(){
         if(result.error)throw Error(`Native CI helper authorization failed at ${result.error} (${result.number??'unknown'}); inspect the captured OS dialog.`);
         return result.readyToSubmit?result:false;
       },'The normal Companion Add Helper authorization dialog',30000);
-      await app.evaluate(({app},target)=>{
+      const click=target=>app.evaluate(({app},target)=>{
         const input=process.mainModule.require(app.getAppPath()+'/src/native/mac-computer.node');
         const access=input.access();
         if(!access.accessibility||!access.postEvents)throw Error('Normal macOS native input permission is required in this disposable CI job.');
         const actual=input.click(...target.point);
         if(actual!==target.securityAgentPid)throw Error('The observed authorization button changed target; inspect the native capture.');
       },target);
+      await click(target);
+      await new Promise(resolve=>setTimeout(resolve,400));
+      const fresh=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript',script],{input:JSON.stringify({name:identity.name,password,mode:'inspect'}),encoding:'utf8',timeout:12000}));
+      if(fresh.error)throw Error('The native authorization dialog changed after submission: '+fresh.error);
+      if(fresh.readyToSubmit){await click(fresh);console.log('Submitted one observed follow-up click after native window activation.');}
       console.log('Native Add Helper pointer input was submitted to the verified SecurityAgent button.');
     },
     close(){
