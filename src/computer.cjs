@@ -11,6 +11,10 @@ function createComputer(window) {
       throw Error("Enable Screen Recording in Settings → Computer access, approve MatiQ Companion in macOS and restart the app before observing.");
     if (process.platform === "darwin" && name !== "observe_screen" && access.input !== "granted")
       throw Error("Enable Accessibility for MatiQ Companion in Settings → Computer access before controlling other apps.");
+    if(process.platform === "darwin" && ["type_text","press_key"].includes(name)) {
+      if(!observation || Date.now()-observation.time>30000 || observation.display!==screen.getPrimaryDisplay().id) throw Error("Observe the screen again before computer actions; the last observation is missing or stale.");
+      await require("./mac-computer.cjs").activateTarget(macTarget,signal);
+    }
     window.hide();
     if(process.platform === "darwin") app.hide();
     try {
@@ -32,6 +36,9 @@ function createComputer(window) {
           throw Error(
             "Screen capture is unavailable. Grant screen-recording access and retry.",
           );
+        const thumbnail=source.thumbnail;
+        const capturedSize=thumbnail.getSize();
+        const image=capturedSize.width<1600?thumbnail.resize({width:capturedSize.width*2}):thumbnail;
         const worker = await createWorker("eng", 1, {
           langPath: language.langPath,
           gzip: true,
@@ -39,8 +46,9 @@ function createComputer(window) {
         });
         let timer;
         try {
+          await worker.setParameters({tessedit_pageseg_mode:"11"});
           const recognized = await Promise.race([
-            worker.recognize(source.thumbnail.toPNG(), {}, { blocks: true }),
+            worker.recognize(image.toPNG(), {}, { blocks: true }),
             new Promise((_, reject) => {
               timer = setTimeout(
                 () => reject(Error("Screen reading timed out.")),
@@ -48,7 +56,7 @@ function createComputer(window) {
               );
             }),
           ]);
-          const size = source.thumbnail.getSize();
+          const size = image.getSize();
           const words = [];
           for (const b of recognized.data.blocks || [])
             for (const p of b.paragraphs || [])
@@ -109,7 +117,8 @@ function createComputer(window) {
       if (process.platform === "win32") {
         await require("./windows-computer.cjs").windowsInput(name, args, display, signal, focusWindow);
       } else if (process.platform === "darwin") {
-        await require("./mac-computer.cjs").macInput(name, args, display, signal, macTarget);
+        const target=await require("./mac-computer.cjs").macInput(name, args, display, signal, macTarget);
+        if(name === "click_screen") macTarget=target;
       } else {
         const nut = require("@nut-tree-fork/nut-js");
         if (name === "click_screen") {
@@ -126,14 +135,13 @@ function createComputer(window) {
       }
       // Native input is queued by the OS; let the foreground application receive it before restoring Companion's focus.
       await new Promise((resolve) => setTimeout(resolve, 200));
-      if(process.platform === "darwin" && name === "click_screen") macTarget=require("./mac-computer.cjs").foregroundProcess();
       observation = null;
       return {
         attempted: true,
         note: "Input dispatched. Observe again to verify the outcome; success in the target application is not implied.",
       };
     } finally {
-      if(process.platform === "darwin") app.show();
+      if(process.platform === "darwin") {app.show();app.focus({steal:true});}
       window.show();
       window.focus();
     }

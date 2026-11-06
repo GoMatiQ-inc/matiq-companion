@@ -42,12 +42,25 @@ static napi_value Click(napi_env env, napi_callback_info info) {
   napi_get_cb_info(env,info,&count,args,nullptr,nullptr);
   if (count!=2 || napi_get_value_double(env,args[0],&x)!=napi_ok || napi_get_value_double(env,args[1],&y)!=napi_ok || !std::isfinite(x) || !std::isfinite(y)) return Fail(env,"Supply finite screen coordinates.");
   CGPoint point=CGPointMake(x,y);
+  pid_t target=0;CFArrayRef windows=CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly,kCGNullWindowID);
+  if(windows){
+    for(CFIndex i=0;i<CFArrayGetCount(windows);i++){
+      CFDictionaryRef item=static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows,i));CGRect bounds{};pid_t owner=0;double alpha=1;
+      auto rectangle=static_cast<CFDictionaryRef>(CFDictionaryGetValue(item,kCGWindowBounds));
+      auto pid=static_cast<CFNumberRef>(CFDictionaryGetValue(item,kCGWindowOwnerPID));
+      auto opacity=static_cast<CFNumberRef>(CFDictionaryGetValue(item,kCGWindowAlpha));
+      if(opacity)CFNumberGetValue(opacity,kCFNumberDoubleType,&alpha);
+      if(rectangle&&pid&&alpha>0&&CGRectMakeWithDictionaryRepresentation(rectangle,&bounds)&&CGRectContainsPoint(bounds,point)&&CFNumberGetValue(pid,kCFNumberIntType,&owner)&&owner>0&&owner!=getpid()){target=owner;break;}
+    }
+    CFRelease(windows);
+  }
+  if(!target)return Fail(env,"Click a visible target application's field before keyboard input.");
   CGEventRef move=CGEventCreateMouseEvent(nullptr,kCGEventMouseMoved,point,kCGMouseButtonLeft);
   CGEventRef down=CGEventCreateMouseEvent(nullptr,kCGEventLeftMouseDown,point,kCGMouseButtonLeft);
   CGEventRef up=CGEventCreateMouseEvent(nullptr,kCGEventLeftMouseUp,point,kCGMouseButtonLeft);
   if (!move || !down || !up) { if(move)CFRelease(move);if(down)CFRelease(down);if(up)CFRelease(up);return Fail(env,"macOS could not create pointer events."); }
   for (auto event : {move,down,up}) { CGEventSetFlags(event,0);CGEventPost(kCGHIDEventTap,event);CFRelease(event); }
-  return Done(env);
+  napi_value value;napi_create_int32(env,target,&value);return value;
 }
 static napi_value Foreground(napi_env env,napi_callback_info) {
   if(!Allowed(env))return nullptr;
@@ -62,7 +75,9 @@ static napi_value Focus(napi_env env,napi_callback_info info) {
   @autoreleasepool {
     if(NSWorkspace.sharedWorkspace.frontmostApplication.processIdentifier==pid)return Done(env);
     NSRunningApplication* application=[NSRunningApplication runningApplicationWithProcessIdentifier:pid];
-    if(!application || application.terminated || ![application activateWithOptions:NSApplicationActivateIgnoringOtherApps])return Fail(env,"macOS could not restore the clicked application. Click its field and observe again.");
+    if(!application || application.terminated)return Fail(env,"The clicked application closed. Click its field and observe again.");
+    [NSApp yieldActivationToApplication:application];
+    if(![application activateFromApplication:NSRunningApplication.currentApplication options:0])return Fail(env,[[NSString stringWithFormat:@"macOS rejected the target activation (PID %d, policy %ld). Click a regular application field and observe again.",pid,(long)application.activationPolicy] UTF8String]);
   }
   return Done(env);
 }

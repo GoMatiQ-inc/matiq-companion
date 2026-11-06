@@ -113,3 +113,10 @@ the inspected 1024×768 privacy page, turns visible optional Yes switches off an
 verifies each transition before Next/Accept. It stops on unfamiliar layouts or
 failed transitions. It never changes an installed user's OS settings. Native
 capture and independent-application input assertions still run afterwards.
+
+Mac input now binds the target PID from the actual clicked window and performs
+cooperative activation before hiding Companion. Foreground-PID confirmation
+still gates keyboard dispatch. Screen OCR uses sparse-text segmentation and
+upsizes small captures, because the ARM first-run Yes/No labels were being
+misread before any settings change. The speculative software-renderer workaround
+was removed. These changes require the normal native and packaged checks.
