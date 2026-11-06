@@ -20,10 +20,12 @@ try {
 // Hosted Windows runners have no supported GPU; the packaged workflow still exercises automatic hardware selection.
 const llama = await getLlama({
   build: "never",
+  debug: process.env.COMPANION_INFERENCE_DEBUG === "1",
   gpu: process.platform === "win32" ? false : "auto",
   logLevel: "error",
 });
-const model = await llama.loadModel({ modelPath: store.location(m) });
+const model = await llama.loadModel({ modelPath: store.location(m), ...(process.env.COMPANION_INFERENCE_DISABLE_MMAP === "1" ? {useMmap:false} : {}) });
+console.log("Native model load mode:", JSON.stringify({mmap:model.useMmap,pid:process.pid,node:process.versions.node}));
 const context = await model.createContext({ contextSize: 2048 });
 try {
   const session = new LlamaChatSession({
