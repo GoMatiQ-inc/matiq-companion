@@ -13,7 +13,8 @@
     "test:desktop": "node scripts/desktop-test.cjs",
     "test:inference": "node scripts/inference-test.mjs",
     "package": "electron-builder --publish never",
-    "package:dir": "electron-builder --dir --publish never"
+    "package:dir": "electron-builder --dir --publish never",
+    "test:tools": "node scripts/tool-inference-test.cjs"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "4.2.6",
@@ -71,7 +72,9 @@
         "nsis"
       ],
       "artifactName": "MatiQ-Companion-${version}-windows-${arch}.${ext}",
-      "publisherName": "MatiQ Inc"
+      "signtoolOptions": {
+        "publisherName": "MatiQ Inc"
+      }
     },
     "nsis": {
       "oneClick": false,

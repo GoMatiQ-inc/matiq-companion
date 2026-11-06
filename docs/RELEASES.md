@@ -12,3 +12,9 @@ Updates are user initiated: Settings → check → download → restart to updat
 4. Promote only after that real two-version upgrade succeeds. Unit tests of updater events do not prove installer trust or OS integration.
 
 The `checks` workflow builds unsigned development installer artifacts for review. It never publishes releases or enables unattended user upgrades. The repository currently has no configured signing secrets; public update release publication remains a qualification gate. Do not mark a source commit as a shipped update.
+
+## Release automation
+
+A version-matching `v*` tag runs the signed release workflow. Both native jobs must pass and signing/notarization configuration must be present before assets are assembled into a **draft** GitHub release. Publishing that qualified draft makes the update discoverable to installed clients. Ordinary source pushes run development checks; they do not force unfinished code onto users.
+
+The protected `release` environment uses `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `MAC_CSC_NAME`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`. These are dedicated distribution identities, not user login credentials. Never commit them or include values in logs. Windows signing must match the configured publisher name.

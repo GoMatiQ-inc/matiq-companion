@@ -1,0 +1,67 @@
+name: Prepare signed release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  signed:
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
+      CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
+      APPLE_ID: ${{ secrets.APPLE_ID }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Verify tag matches package version
+        run: node -e "if(process.env.GITHUB_REF_NAME !== 'v'+require('./package.json').version)throw Error('Tag must match package version')"
+      - name: Require real signing configuration
+        run: node -e "require('./scripts/release-config.cjs')"
+      - run: npm ci
+      - run: npm test
+      - run: npm run test:inference
+      - run: npm run test:tools
+      - run: npm run test:desktop
+      - run: npx --no-install electron-builder --config scripts/release-config.cjs --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.os }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            dist/*.dmg
+            dist/*.zip
+            dist/*.exe
+            dist/*.yml
+            dist/*.blockmap
+  draft:
+    needs: signed
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: signed-*
+          merge-multiple: true
+          path: assets
+      - name: Create a draft for native upgrade qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$GITHUB_REF_NAME" assets/* --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Signed build awaiting native install and two-version upgrade qualification. Publish only after completing docs/RELEASES.md."
