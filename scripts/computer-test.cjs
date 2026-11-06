@@ -14,7 +14,10 @@ const {execFileSync}=require('node:child_process');
     ownedApp=lifecycle.capture(app.process());
     const main=await app.firstWindow();
     await main.getByRole('heading',{name:'Your own AI workspace.'}).waitFor();
-    await app.evaluate(({app,BrowserWindow})=>{
+    await app.evaluate(({app,BrowserWindow,desktopCapturer,screen})=>{
+      // Retain the actual native frame for failure evidence without changing capture results.
+      const capture=desktopCapturer.getSources.bind(desktopCapturer);
+      desktopCapturer.getSources=async options=>{const sources=await capture(options);globalThis.__computerCapture=sources.find(s=>s.display_id===String(screen.getPrimaryDisplay().id))?.thumbnail;return sources;};
       globalThis.__computer=process.mainModule.require(app.getAppPath()+'/src/computer.cjs').createComputer(BrowserWindow.getAllWindows()[0]);
     });
     const act=(name,args={})=>app.evaluate(async(_,{name,args})=>globalThis.__computer(name,args,new AbortController().signal),{name,args});
@@ -52,7 +55,7 @@ const {execFileSync}=require('node:child_process');
     }
     const entry=path.join(profile,'target.cjs');
     const html='<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">ENTRY</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">Verify</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>';
-    await fs.writeFile(entry,`const {app,BrowserWindow,screen}=require('electron');app.setName('Companion Input Target');app.setPath('userData',${JSON.stringify(path.join(profile,'target-profile'))});app.whenReady().then(async()=>{if(process.platform==='darwin')app.setActivationPolicy('regular');const area=screen.getPrimaryDisplay().workArea;const window=new BrowserWindow({width:800,height:600,x:area.x+40,y:area.y+60,alwaysOnTop:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});await window.loadURL('data:text/html,'+encodeURIComponent(${JSON.stringify(html)}));window.show();app.focus({steal:true});window.focus();});app.on('window-all-closed',()=>app.quit());`);
+    await fs.writeFile(entry,`const {app,BrowserWindow,screen}=require('electron');app.setName('Companion Input Target');app.setPath('userData',${JSON.stringify(path.join(profile,'target-profile'))});app.whenReady().then(async()=>{if(process.platform==='darwin')app.setActivationPolicy('regular');const area=screen.getPrimaryDisplay().workArea;const window=new BrowserWindow({width:800,height:600,x:area.x+40,y:area.y+60,alwaysOnTop:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});await window.loadURL('data:text/html,'+encodeURIComponent(${JSON.stringify(html)}));if(process.platform==='linux')window.setBounds(area);else window.maximize();window.show();app.focus({steal:true});window.focus();});app.on('window-all-closed',()=>app.quit());`);
     let targetExecutable=require('electron');
     if(process.platform==='darwin') {
       const bundle=path.resolve(targetExecutable,'../../..'),copy=path.join(profile,'Companion Input Target.app');
@@ -69,6 +72,7 @@ const {execFileSync}=require('node:child_process');
     const page=await target.firstWindow();
     await page.getByText('Companion computer verification',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
     let observed=await act('observe_screen');
     if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64') {
       const startMenu=words=>words.some(w=>/^Pinned$/i.test(w.text)) && words.some(w=>/^Recommended$/i.test(w.text));
@@ -125,7 +129,15 @@ const {execFileSync}=require('node:child_process');
     console.log('PASS: real screen OCR, pointer focus/click, text and key input into a separate application process; stale observations rejected.');
   } catch(error) {
     await fs.mkdir('.validation',{recursive:true});
-    await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-failure.json`),JSON.stringify({platform:process.platform,arch:process.arch,error:error.message,appPid:app?.process().pid,targetPid:target?.process().pid},null,2)+'\n');
+    let captureError=null,captureTimer;
+    try {
+      if(!app)throw Error('The app did not start; no native observation frame is available.');
+      const png=await Promise.race([app.evaluate(()=>globalThis.__computerCapture?.toPNG().toString('base64')),new Promise((_,reject)=>{captureTimer=setTimeout(()=>reject(Error('Failure-frame retrieval timed out.')),8000);})]);
+      if(!png)throw Error('No native observation frame was captured before this failure.');
+      await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-failure.png`),Buffer.from(png,'base64'));
+    } catch(captureFailure){captureError=captureFailure.message;console.error('Computer failure-frame diagnostic:',captureError);}
+    finally {clearTimeout(captureTimer);}
+    await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-failure.json`),JSON.stringify({platform:process.platform,arch:process.arch,error:error.message,captureError,appPid:app?.process().pid,targetPid:target?.process().pid},null,2)+'\n');
     throw error;
   } finally {
     const tree=[...lifecycle.captureTree(ownedApp),...lifecycle.captureTree(ownedTarget)];
