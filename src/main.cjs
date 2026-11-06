@@ -398,6 +398,7 @@ function cancel() {
       return request(name,args);
     });
     await contents.loadFile(path.join(__dirname, "ui/index.html"));
+    if(!host)await require("@matiq-solutions/shell").apply(contents);
     return {
       window,
       async status() {
@@ -418,13 +419,17 @@ async function launch() {
   if(process.env.COMPANION_TEST_PROFILE)app.setPath('userData',path.resolve(process.env.COMPANION_TEST_PROFILE));
   app.setName('MatiQ Companion');
   if(!app.requestSingleInstanceLock()){app.exit(0);return;}
-  const tool=await createTool();let quitting=false;
+  await app.whenReady();
+  const lease=await require('@matiq-solutions/runtime/tool-lease.cjs').acquireToolLease({root:path.join(app.getPath('appData'),'MatiQ Solutions','tool-locks'),id:'com.matiq.companion',owner:app.getName()});
+  let tool;
+  try{tool=await createTool();}catch(error){await lease.release();throw error;}
+  let quitting=false,checking=false;
   app.on('second-instance',()=>{tool.window.show();tool.window.focus();});
   tool.window.on('close',event=>{if(!quitting){event.preventDefault();app.quit();}});
   app.on('window-all-closed',()=>app.quit());
   app.on('before-quit',event=>{
-    if(quitting)return;event.preventDefault();
-    (async()=>{const status=await tool.status();if(status.busy)throw Error('Finish Companion work before quitting: '+status.reason);await tool.dispose();quitting=true;app.quit();})().catch(error=>dialog.showErrorBox('Companion is busy',error.message));
+    if(quitting)return;event.preventDefault();if(checking)return;checking=true;
+    (async()=>{await tool.window.webContents.executeJavaScript('document.documentElement.inert=true');const status=await tool.status();if(status.busy)throw Error('Finish Companion work before quitting: '+status.reason);await tool.dispose();await lease.release();quitting=true;app.quit();})().catch(async error=>{if(!tool.window.isDestroyed())await tool.window.webContents.executeJavaScript('document.documentElement.inert=false');dialog.showErrorBox('Companion could not close',error.message);}).finally(()=>{checking=false;});
   });
   return tool;
 }

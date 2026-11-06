@@ -30,7 +30,9 @@
     "electron-updater": "6.8.9",
     "exceljs": "4.4.0",
     "node-llama-cpp": "3.22.3",
-    "tesseract.js": "6.0.1"
+    "tesseract.js": "6.0.1",
+    "@matiq-solutions/runtime": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.0/matiq-solutions-runtime-0.1.0.tgz",
+    "@matiq-solutions/shell": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.0/matiq-solutions-shell-0.1.0.tgz"
   },
   "devDependencies": {
     "electron": "45.2.3",
@@ -48,7 +50,8 @@
       "package.json",
       "LICENSE",
       "NOTICE",
-      "docs/MODELS.md"
+      "docs/MODELS.md",
+      "matiq-tool.json"
     ],
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*",
