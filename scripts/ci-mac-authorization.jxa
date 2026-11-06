@@ -1,0 +1,34 @@
+ObjC.import('Foundation');
+const environment=$.NSProcessInfo.processInfo.environment;
+const env=name=>ObjC.unwrap(environment.objectForKey(name));
+if(env('GITHUB_ACTIONS')!=='true'||env('RUNNER_ENVIRONMENT')!=='github-hosted'||env('GITHUB_REPOSITORY')!=='GoMatiQ-inc/matiq-companion')throw Error('Use this UI fixture only in a disposable hosted Companion job.');
+const data=$.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
+const config=JSON.parse(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data,$.NSUTF8StringEncoding)));
+if(config.name!=='mqci'+env('GITHUB_RUN_ID')+'a'+env('GITHUB_RUN_ATTEMPT'))throw Error('Use only the owned CI identity.');
+let step='locate',result;
+try {
+  const events=Application('System Events');
+  const agent=events.processes.byName('SecurityAgent');
+  if(!agent.exists()||agent.windows().length===0)result={ready:false};
+  else {
+    const window=agent.windows[0];
+    step='validate';
+    const texts=window.staticTexts().map(text=>text.name());
+    if(!texts.includes('MatiQ Companion')||!texts.some(text=>text.includes('An update is ready to install.'))||!texts.some(text=>text.includes('new helper tool')))throw Error('Unexpected authorization request.');
+    const fields=window.textFields(),button=window.buttons.byName('Add Helper');
+    if(fields.length!==2||!button.exists())throw Error('Inspect the changed authorization layout.');
+    agent.frontmost=true;
+    step='focus-user';fields[0].attributes.byName('AXFocused').value=true;
+    if(!agent.frontmost()||!fields[0].attributes.byName('AXFocused').value())throw Error('The owned user field is not focused.');
+    step='type-user';events.keystroke('a',{using:['command down']});events.keystroke(config.name);
+    $.NSThread.sleepForTimeInterval(0.2);
+    if(fields[0].value()!==config.name)throw Error('The fixture identity was not entered.');
+    step='focus-password';fields[1].attributes.byName('AXFocused').value=true;
+    if(!agent.frontmost()||!fields[1].attributes.byName('AXFocused').value())throw Error('The owned password field is not focused.');
+    step='type-password';events.keystroke('a',{using:['command down']});events.keystroke(config.password);
+    $.NSThread.sleepForTimeInterval(0.3);
+    if(!agent.frontmost())throw Error('Authorization lost focus before submission.');
+    step='submit';button.click();result={authorizationSubmitted:true};
+  }
+} catch(error) {result={error:step,number:Number(error.errorNumber)||null};}
+JSON.stringify(result);

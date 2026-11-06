@@ -103,7 +103,9 @@ if sys.argv[1:] == ["create"]:
     auth = ["/usr/bin/sudo", "-n", "-u", "#" + caller, "/usr/bin/dscl", ".", "-authonly", name]
     if password_command(auth, password, 15) != 0 or password_command(auth, password + "wrong", 15) == 0:
         raise RuntimeError("Directory authentication did not enforce the fixture password.")
-    print(json.dumps({"name": name, "uid": record["uid"], "passwordVerified": True, "wrongPasswordRejected": True}))
+    if password_command(auth, password, 15) != 0:
+        raise RuntimeError("The CI identity is not usable after the negative password check; inspect the local account policy.")
+    print(json.dumps({"name": name, "uid": record["uid"], "passwordVerified": True, "wrongPasswordRejected": True, "readyAfterNegativeCheck": True}))
 elif sys.argv[1:] == ["delete"]:
     if state.exists():
         record = json.loads(state.read_text())

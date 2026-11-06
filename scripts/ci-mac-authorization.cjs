@@ -10,12 +10,12 @@ function createAuthorizationFixture(){
   let identity;
   try {identity=invoke('create',{password});}
   catch(error){invoke('delete');password='';throw error;}
-  const script=`ObjC.import('Foundation');const data=$.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;const config=JSON.parse(ObjC.unwrap($.NSString.alloc.initWithDataEncoding(data,$.NSUTF8StringEncoding)));let step='locate';let result;try{const agent=Application('System Events').processes.byName('SecurityAgent');if(!agent.exists()||agent.windows().length===0){result={ready:false};}else{const window=agent.windows[0];step='validate';const texts=window.staticTexts().map(text=>text.name());if(!texts.includes('MatiQ Companion')||!texts.some(text=>text.includes('An update is ready to install.'))||!texts.some(text=>text.includes('new helper tool')))throw Error('Unexpected authorization request.');const fields=window.textFields();if(fields.length!==2)throw Error('Inspect the changed authorization layout.');const button=window.buttons.byName('Add Helper');if(!button.exists())throw Error('Inspect the helper authorization action.');step='fill';fields[0].value=config.name;if(fields[0].value()!==config.name)throw Error('The fixture identity was not selected.');fields[1].value=config.password;step='submit';button.click();result={authorizationSubmitted:true};}}catch(error){result={error:step,number:Number(error.errorNumber)||null};}JSON.stringify(result);`;
+  const script=path.join(__dirname,'ci-mac-authorization.jxa');
   return {
     identity,
     async authorize(){
       await waitFor(()=>{
-        const result=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript','-e',script],{input:JSON.stringify({name:identity.name,password}),encoding:'utf8',timeout:12000}));
+        const result=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript',script],{input:JSON.stringify({name:identity.name,password}),encoding:'utf8',timeout:12000}));
         if(result.error)throw Error(`Native CI helper authorization failed at ${result.error}; inspect the captured OS dialog.`);
         return result.authorizationSubmitted;
       },'The normal Companion Add Helper authorization dialog',30000);
