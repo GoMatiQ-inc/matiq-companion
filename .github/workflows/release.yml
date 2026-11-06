@@ -126,8 +126,58 @@ jobs:
           COMPANION_RELEASE_OUTPUT: upgrade-target
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           CSC_INSTALLER_NAME: ${{ secrets.CSC_INSTALLER_NAME }}
-      - name: Qualify real signed download, restart and retained projects/models
+      - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
+        with:
+          name: verified-mac-upgrade-target
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            upgrade-target/*.zip
+            upgrade-target/*.yml
+            upgrade-target/*.blockmap
+            upgrade-target/mac-signature.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: signed-${{ matrix.os }}
+          retention-days: 7
+          if-no-files-found: error
+          path: |
+            dist/*.pkg
+            dist/*.zip
+            dist/*.exe
+            dist/*.yml
+            dist/*.blockmap
+            dist/*-signature.json
+  upgrade:
+    needs: signed
+    if: inputs.platform != 'windows'
+    runs-on: macos-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/companion-models
+          key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
+          enableCrossOsArchive: true
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:inference
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-macos-latest
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-mac-upgrade-target
+          path: upgrade-target
+      - name: Qualify real signed download, restart and retained projects/models
         timeout-minutes: 8
         run: npm run test:upgrade
         env:
@@ -141,20 +191,13 @@ jobs:
           path: .validation/upgrade-diagnostic.json
       - uses: actions/upload-artifact@v4
         with:
-          name: signed-${{ matrix.os }}
+          name: mac-upgrade-proof
           retention-days: 7
           if-no-files-found: error
-          path: |
-            dist/*.pkg
-            dist/*.zip
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
-            dist/*-signature.json
-            dist/upgrade-proof.json
+          path: dist/upgrade-proof.json
   draft:
     if: github.event_name == 'push'
-    needs: signed
+    needs: [signed, upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

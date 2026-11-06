@@ -36,11 +36,13 @@ jobs:
           sha=run['head_sha'];subprocess.run(['git','merge-base','--is-ancestor',sha,'origin/main'],check=True)
           jobs=json.loads(gh('api',f'repos/{repo}/actions/runs/{run_id}/jobs?per_page=100'))['jobs']
           assert any(j['name']=='signed (macos-latest)' and j['conclusion']=='success' for j in jobs),'Require the real native Mac signing job.'
+          assert any(j['name']=='upgrade' and j['conclusion']=='success' for j in jobs),'Require the independent actual signed upgrade job.'
           checks=json.loads(gh('api',f'repos/{repo}/actions/workflows/checks.yml/runs?head_sha={sha}&status=completed&per_page=20'))['workflow_runs']
           assert any(r['head_sha']==sha and r['conclusion']=='success' for r in checks),'Require native platform CI on the exact source commit.'
           metadata=json.loads(subprocess.check_output(['git','show',f'{sha}:package.json'],text=True));version=metadata['version']
           assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',version) and metadata['build']['appId']=='com.matiq.companion','Require the Companion identity and a stable three-part version.'
           gh('run','download',run_id,'--repo',repo,'--name','signed-macos-latest','--dir','release-assets')
+          gh('run','download',run_id,'--repo',repo,'--name','mac-upgrade-proof','--dir','release-assets')
           folder=pathlib.Path('release-assets');pkg=f'MatiQ-Companion-{version}-mac-arm64.pkg';zip_name=f'MatiQ-Companion-{version}-mac-arm64.zip'
           required={pkg,zip_name,'latest-mac.yml','mac-signature.json','upgrade-proof.json'};optional={zip_name+'.blockmap'};present={p.name for p in folder.iterdir()}
           assert required<=present and present<=required|optional,'Unexpected or incomplete signed artifact set.'
