@@ -1,4 +1,4 @@
-"""Own one non-login administrator identity for normal authorization in a disposable CI VM."""
+"""Own one disposable administrator identity for normal authorization in a disposable CI VM."""
 import json
 import os
 from pathlib import Path
@@ -92,7 +92,7 @@ if sys.argv[1:] == ["create"]:
     record = {"owner": owner, "name": name, "home": str(home)}
     with state.open("x") as file: json.dump(record, file)
     state.chmod(0o600)
-    result = password_command(["/usr/sbin/sysadminctl", "-addUser", name, "-fullName", "Companion Upgrade CI", "-home", str(home), "-shell", "/usr/bin/false", "-password", "-", "-admin"], password)
+    result = password_command(["/usr/sbin/sysadminctl", "-addUser", name, "-fullName", "Companion Upgrade CI", "-home", str(home), "-shell", "/bin/zsh", "-password", "-", "-admin"], password)
     if result or name not in users(): raise RuntimeError("The disposable administrator identity was not created.")
     record["uid"] = verify_record(record)
     state.write_text(json.dumps(record))
