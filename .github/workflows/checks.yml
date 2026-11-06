@@ -57,6 +57,7 @@ jobs:
         if: always()
         with:
           name: development-installer-${{ matrix.os }}
+          include-hidden-files: true
           retention-days: 3
           if-no-files-found: error
           path: |

@@ -44,7 +44,7 @@ const assert = require("node:assert/strict");
           await fixture.loadURL(
             "data:text/html," +
               encodeURIComponent(
-                '<html><body style="background:white;color:black;font:32px sans-serif"><p>Companion computer verification</p><label for="target">Target</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="margin-top:40px;font:32px sans-serif">Confirm</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>',
+                '<html><body style="background:white;color:black;font:32px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:white;color:black;border:3px solid black;padding:15px;margin-top:40px;font:36px sans-serif">CONFIRM</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>',
               ),
           );
           fixture.show();
@@ -67,7 +67,11 @@ const assert = require("node:assert/strict");
           await computer("press_key", { key: "Backspace" }, signal);
           const last = await observe();
           const confirm = last.words.find((word) => /^confirm$/i.test(word.text));
-          if (!confirm) throw Error("OCR did not locate the Confirm button.");
+          if (!confirm) {
+            const b = fixture.getBounds(), d = screen.getPrimaryDisplay().bounds;
+            const fixtureWords = last.words.filter(w => w.x >= b.x-d.x && w.x < b.x-d.x+b.width && w.y >= b.y-d.y && w.y < b.y-d.y+b.height).map(w => w.text);
+            throw Error("OCR did not locate the Confirm button in the owned fixture: " + JSON.stringify(fixtureWords));
+          }
           await computer("click_screen", { x: confirm.x, y: confirm.y }, signal);
           return {
             text: observed.text,

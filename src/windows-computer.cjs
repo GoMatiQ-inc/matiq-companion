@@ -11,7 +11,7 @@ function windowsInput(action, args, display, signal) {
   const program = readFileSync(path.join(__dirname, "native/windows-computer.ps1"), "utf8");
   const executable = path.join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe");
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(program, "utf16le").toString("base64")], { windowsHide: true, signal });
+    const child = spawn(executable, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", Buffer.from(program, "utf16le").toString("base64")], { windowsHide: true, signal });
     let stdout = "", stderr = "";
     const timer = setTimeout(() => child.kill(), 15000);
     child.stdout.on("data", (chunk) => { stdout = (stdout + chunk).slice(-4000); });

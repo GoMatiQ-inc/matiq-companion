@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+$ProgressPreference = 'SilentlyContinue'
 [Console]::InputEncoding = [Text.UTF8Encoding]::new($false)
 $inputData = [Console]::In.ReadToEnd() | ConvertFrom-Json
 Add-Type -TypeDefinition @'
@@ -30,7 +31,7 @@ switch ($inputData.action) {
  'press_key' {
   $keys=@{Enter=13;Escape=27;Tab=9;Backspace=8;Left=37;Up=38;Right=39;Down=40}
   if(-not $keys.ContainsKey([string]$inputData.key)){throw 'Choose a supported key.'}
-  [CompanionInput]::Press([ushort]$keys[[string]$inputData.key])
+  [CompanionInput]::Press([uint16]$keys[[string]$inputData.key])
  }
  default { throw 'Choose a supported computer action.' }
 }
