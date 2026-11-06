@@ -1,0 +1,82 @@
+name: Publish verified Mac installer
+on:
+  workflow_dispatch:
+    inputs:
+      source_run:
+        description: Successful signed qualification run with upgrade proof
+        required: true
+permissions:
+  contents: read
+concurrency: publish-verified-mac
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require trusted qualification and exact verified artifact bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.source_run }}
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib,json,os,pathlib,re,subprocess
+          def gh(*args): return subprocess.check_output(['gh',*args],text=True)
+          repo=os.environ['GITHUB_REPOSITORY'];run_id=os.environ['SOURCE_RUN']
+          assert re.fullmatch(r'[0-9]+',run_id),'Use a numeric signed qualification run ID.'
+          run=json.loads(gh('api',f'repos/{repo}/actions/runs/{run_id}'))
+          assert run['conclusion']=='success' and run['path']=='.github/workflows/release.yml','Require a successful signed qualification workflow.'
+          assert run['head_repository']['full_name']==repo,'Fork artifacts are not publishable.'
+          sha=run['head_sha'];subprocess.run(['git','merge-base','--is-ancestor',sha,'origin/main'],check=True)
+          jobs=json.loads(gh('api',f'repos/{repo}/actions/runs/{run_id}/jobs?per_page=100'))['jobs']
+          assert any(j['name']=='signed (macos-latest)' and j['conclusion']=='success' for j in jobs),'Require the real native Mac signing job.'
+          checks=json.loads(gh('api',f'repos/{repo}/actions/workflows/checks.yml/runs?head_sha={sha}&status=completed&per_page=20'))['workflow_runs']
+          assert any(r['head_sha']==sha and r['conclusion']=='success' for r in checks),'Require native platform CI on the exact source commit.'
+          metadata=json.loads(subprocess.check_output(['git','show',f'{sha}:package.json'],text=True));version=metadata['version']
+          assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',version) and metadata['build']['appId']=='com.matiq.companion','Require the Companion identity and a stable three-part version.'
+          gh('run','download',run_id,'--repo',repo,'--name','signed-macos-latest','--dir','release-assets')
+          folder=pathlib.Path('release-assets');pkg=f'MatiQ-Companion-{version}-mac-arm64.pkg';zip_name=f'MatiQ-Companion-{version}-mac-arm64.zip'
+          required={pkg,zip_name,'latest-mac.yml','mac-signature.json','upgrade-proof.json'};optional={zip_name+'.blockmap'};present={p.name for p in folder.iterdir()}
+          assert required<=present and present<=required|optional,'Unexpected or incomplete signed artifact set.'
+          proof=json.loads((folder/'mac-signature.json').read_text());upgrade=json.loads((folder/'upgrade-proof.json').read_text())
+          assert proof['version']==version and proof['artifact']==pkg and proof['platform']=='darwin' and all(proof.get(k) is True for k in ['signed','notarized','stapled']),'Require real Apple signature, notarization and stapling proof.'
+          assert upgrade['baseVersion']==version and upgrade['signedDownloadRestart'] is True and upgrade['automaticRelaunch'] is True and all(upgrade['retained'].get(k) is True for k in ['project','settings','modelSha256','generatedFile']),'Require actual signed upgrade and retained data proof.'
+          assert upgrade['baseZipSha256']==proof['assets'][zip_name],'Upgrade proof must cover this exact base ZIP.'
+          published=present-{'mac-signature.json','upgrade-proof.json'}
+          assert set(proof['assets'])==published,'Signature proof must cover every downloadable asset.'
+          lines=[]
+          for name in sorted(published):
+              digest=hashlib.sha256((folder/name).read_bytes()).hexdigest();assert digest==proof['assets'][name],f'Unverified bytes: {name}'
+              if name==pkg: assert digest==proof['sha256']
+              lines.append(f'{digest}  {name}')
+          (folder/'SHA256SUMS.txt').write_text('\n'.join(lines)+'\n')
+          notes=f"""MatiQ Companion {version} — signed Mac installer
+
+          Initial local desktop AI workspace in the MatiQ Tools family, presented with the MatiQ Solutions wordmark.
+
+          Download **{pkg}**. This installer is for Apple Silicon Macs; Intel Macs are not qualified. Local chat models download separately during setup.
+
+          The app and installer passed Developer ID verification, Apple notarization, stapling and Gatekeeper assessment. The update ZIP passed signature and checksum validation. A real signed download/restart test preserved projects, settings, generated files and model hashes. [Verified qualification]({run['html_url']}); source `{sha}`.
+
+          File and document tools require explicit grants/approvals. Computer use is experimental and needs OS privacy permissions. See [capabilities and limits](https://github.com/{repo}#readme).
+
+          Windows signed distribution is awaiting a valid Microsoft company-verification record and certificate profile; this release contains the qualified Mac installer only.
+
+          Free personal and internal business use under the [MatiQ Companion No-Sale License](https://github.com/{repo}/blob/{sha}/LICENSE). Third-party code and model weights retain their own licenses.
+          """
+          (folder/'RELEASE_NOTES.md').write_text(notes)
+          with open(os.environ['GITHUB_ENV'],'a') as env: env.write(f'RELEASE_TAG=v{version}\nSOURCE_SHA={sha}\n')
+          PYTHON
+      - name: Publish verified Mac installer and update assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          shopt -s nullglob
+          gh release create "$RELEASE_TAG" release-assets/*.pkg release-assets/*.zip release-assets/*.blockmap release-assets/latest-mac.yml release-assets/SHA256SUMS.txt \
+            --target "$SOURCE_SHA" --title "MatiQ Companion $RELEASE_TAG — signed Mac installer" --notes-file release-assets/RELEASE_NOTES.md --latest

@@ -1,8 +1,4 @@
-import {
-  getLlama,
-  LlamaChatSession,
-  defineChatSessionFunction,
-} from "node-llama-cpp";
+import { getLlama, LlamaChatSession } from "node-llama-cpp";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { ModelStore } = require("../src/models.cjs");
@@ -12,8 +8,20 @@ if (!dir)
   throw Error("Set COMPANION_VALIDATION_MODELS to a task-owned model folder.");
 const store = new ModelStore(dir),
   m = MODELS[0];
-await store.download(m, AbortSignal.timeout(120000), () => {});
-const llama = await getLlama({ build: "never", logLevel: "error" });
+try {
+  await store.download(m, AbortSignal.timeout(300000), () => {});
+} catch (error) {
+  throw new Error(
+    "Verified model setup failed. Inspect the network/checksum cause and retry the failed job; do not skip verification.",
+    { cause: error },
+  );
+}
+// Hosted Windows runners have no supported GPU; the packaged workflow still exercises automatic hardware selection.
+const llama = await getLlama({
+  build: "never",
+  gpu: process.platform === "win32" ? false : "auto",
+  logLevel: "error",
+});
 const model = await llama.loadModel({ modelPath: store.location(m) });
 const context = await model.createContext({ contextSize: 2048 });
 try {
