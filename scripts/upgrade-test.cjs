@@ -220,6 +220,7 @@ async function bundleVersion(apps) {
     }
   });
   server.requestTimeout = 30000;
+  let runtimeLog = "";
   let app,
     handle,
     owned,
@@ -243,9 +244,14 @@ async function bundleVersion(apps) {
       args: [],
       env: {
         ...process.env,
+        ELECTRON_ENABLE_LOGGING: "1",
       },
     });
     handle = app.process();
+    for (const stream of [handle.stdout, handle.stderr])
+      stream?.on("data", (chunk) => {
+        runtimeLog = (runtimeLog + chunk.toString()).slice(-32000);
+      });
     owned = lifecycle.capture(handle);
     const page = await app.firstWindow();
     const actualProfile = await app.evaluate(({ app }) =>
@@ -394,10 +400,10 @@ async function bundleVersion(apps) {
     );
   } finally {
     clearTimeout(watchdog);
-    if (handle && handle.exitCode === null && handle.signalCode === null)
-      await app.close();
     const diagnostic = {
       successful,
+      runtimeLog,
+      originalProcess: handle ? { pid: handle.pid, exitCode: handle.exitCode, signalCode: handle.signalCode } : null,
       installedVersion: await bundleVersion(apps),
       processes: [...processesIn(apps), ...processesIn(shipIt)],
       logs: {},
@@ -417,6 +423,8 @@ async function bundleVersion(apps) {
       JSON.stringify(diagnostic, null, 2) + "\n",
     );
     console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
+    if (handle && handle.exitCode === null && handle.signalCode === null)
+      await app.close();
     const remaining = [...processesIn(apps), ...processesIn(shipIt)].map(
       (process) => lifecycle.capture({ pid: process.pid }),
     );

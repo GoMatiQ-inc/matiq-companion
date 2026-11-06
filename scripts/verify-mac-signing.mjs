@@ -39,6 +39,16 @@ function run(command, args) {
     );
   return result.stdout + result.stderr;
 }
+assert.equal(
+  run("/usr/bin/plutil", ["-extract", "CFBundleShortVersionString", "raw", "-o", "-", path.join(app, "Contents/Info.plist")]).trim(),
+  version,
+  "The signed bundle must contain the requested version.",
+);
+assert.equal(
+  run("/usr/bin/plutil", ["-extract", "CFBundleIdentifier", "raw", "-o", "-", path.join(app, "Contents/Info.plist")]).trim(),
+  "com.matiq.companion",
+  "The signed bundle must retain the Companion identity.",
+);
 for (const target of [app]) {
   run("/usr/bin/codesign", ["--verify", "--deep", "--strict", target]);
   const details = run("/usr/bin/codesign", [
