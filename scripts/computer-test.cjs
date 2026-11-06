@@ -79,6 +79,21 @@ const {execFileSync}=require('node:child_process');
         desktopPreparation.startMenuDismissed=true;
       }
     }
+    if(process.env.COMPANION_FIXTURE_LAYOUT_DIAGNOSTIC==='1') {
+      const capture=async suffix=>{
+        const png=await app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');});
+        await fs.writeFile(`.validation/computer-${process.platform}-${process.arch}-${suffix}.png`,Buffer.from(png,'base64'));
+      };
+      await capture('label-before');
+      const before=observed.words.map(w=>w.text);
+      await page.locator('label').evaluate(label=>{label.style.display='block';label.style.marginBottom='24px';});
+      await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+      observed=await act('observe_screen');
+      await capture('label-after');
+      const after=observed.words.map(w=>w.text);
+      await fs.writeFile(`.validation/computer-${process.platform}-${process.arch}-label-comparison.json`,JSON.stringify({before,after},null,2)+'\n');
+      console.log('Controlled fixture label comparison:',JSON.stringify({before,after}));
+    }
     const label=observed.words.find(w=>/^entry$/i.test(w.text));
     if(!label) {
       if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64' && /Choose privacy settings/i.test(observed.text)) {
