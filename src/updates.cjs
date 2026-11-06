@@ -51,6 +51,8 @@ function configureUpdates(app, emit, providedUpdater) {
     state,
     check: async () => {
       if (!updater) throw Error(state.message);
+      if (state.status === "installing")
+        throw Error("The update is installing. Complete any system authorization prompt.");
       return updater.checkForUpdates();
     },
     download: async () => {
@@ -68,7 +70,18 @@ function configureUpdates(app, emit, providedUpdater) {
     install: () => {
       if (state.status !== "downloaded")
         throw Error("Download the update first.");
-      updater.quitAndInstall(true, true);
+      change({
+        status: "installing",
+        message: process.platform === "darwin"
+          ? "Installing update. Complete any macOS authorization prompt; the app will restart."
+          : "Installing update. The app will restart when installation finishes.",
+      });
+      try {
+        updater.quitAndInstall(true, true);
+      } catch (error) {
+        change({ status: "error", message: error.message });
+        throw error;
+      }
     },
   };
 }

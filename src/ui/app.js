@@ -245,7 +245,7 @@ function render() {
       render();
     });
     const restartUpdate = button("Restart to update", () => call("update.install"), true);
-    checkUpdate.disabled = ["development", "checking", "downloading", "downloaded"].includes(u.status);
+    checkUpdate.disabled = ["development", "checking", "downloading", "downloaded", "installing"].includes(u.status);
     downloadUpdate.disabled = u.status !== "available";
     restartUpdate.disabled = u.status !== "downloaded";
     panel.append(actions(checkUpdate, downloadUpdate, restartUpdate));
