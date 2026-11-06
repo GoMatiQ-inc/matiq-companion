@@ -38,6 +38,11 @@ test("updates require explicit download and restart after a completed download",
   assert.equal(c.state.status, "downloaded");
   c.install();
   assert.equal(restarts, 1);
+  assert.equal(c.state.status, "installing");
+  assert.match(c.state.message, /restart/);
+  assert.throws(() => c.install(), /Download/);
+  await assert.rejects(c.check(), /installing/);
+  assert.equal(restarts, 1);
   u.emit("error", Error("Network unavailable"));
   assert.equal(c.state.status, "error");
   assert.match(c.state.message, /Network/);
@@ -70,4 +75,17 @@ test("pending downloads block duplicate downloads and restart until completion",
   await download;
   updates.install();
   assert.equal(restarts, 1);
+});
+
+
+test("a synchronous installer failure remains visible and does not claim success", () => {
+  const updater = new EventEmitter();
+  updater.quitAndInstall = () => { throw Error("Installer could not start. Restart the app and try again."); };
+  const events = [];
+  const updates = configureUpdates({ isPackaged: true, getVersion: () => "0.1.0" }, (event) => events.push(structuredClone(event)), updater);
+  updater.emit("update-downloaded");
+  assert.throws(() => updates.install(), /Installer could not start/);
+  assert.equal(updates.state.status, "error");
+  assert.match(updates.state.message, /Restart the app/);
+  assert.deepEqual(events.map((event) => event.state.status), ["downloaded", "installing", "error"]);
 });

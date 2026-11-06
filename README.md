@@ -10,7 +10,7 @@ Native development and packaged checks pass on Apple Silicon, Intel Mac, Windows
 
 Open the [current release](https://github.com/GoMatiQ-inc/matiq-companion/releases/latest), check its qualified architectures, and download the matching **mac-arm64.pkg** for Apple Silicon or **mac-x64.pkg** for Intel when offered. Follow macOS installer prompts. Download a verified local model during setup; model weights are separate from the installer. An architecture is available only when its installer is included in that release.
 
-For later releases, use **Settings → Check for updates → Download update → Restart to update**. Restart becomes available after the download completes. See the release's checksums and validation record for exact scope.
+For later releases, use **Settings → Check for updates → Download update → Restart to update**. Restart becomes available after the download completes. For a system-wide Mac installation, complete the normal macOS administrator authorization prompt when requested. See the release's checksums and validation record for exact scope.
 
 ## Features
 
