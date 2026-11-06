@@ -20,18 +20,13 @@ function createComputer(window) {
       if (name === "observe_screen") {
         observation = null;
         focusWindow = process.platform === "win32" ? require("./windows-computer.cjs").foregroundWindow() : null;
-        const sources = await desktopCapturer.getSources({
-          types: ["screen"],
-          thumbnailSize: {
-            width: Math.min(1920, display.size.width * display.scaleFactor),
-            height: Math.min(1200, display.size.height * display.scaleFactor),
-          },
-        });
-        const source = sources.find((s) => s.display_id === String(display.id));
-        if (!source || source.thumbnail.isEmpty())
-          throw Error(
-            "Screen capture is unavailable. Grant screen-recording access and retry.",
-          );
+        let image;
+        if(process.platform === "win32") image=require("./windows-computer.cjs").captureScreen();
+        else {
+          const sources=await desktopCapturer.getSources({types:["screen"],thumbnailSize:{width:Math.min(1920,display.size.width*display.scaleFactor),height:Math.min(1200,display.size.height*display.scaleFactor)}});
+          image=sources.find(source=>source.display_id===String(display.id))?.thumbnail;
+        }
+        if(!image || image.isEmpty()) throw Error("Screen capture is unavailable. Grant screen-recording access and retry.");
         const worker = await createWorker("eng", 1, {
           langPath: language.langPath,
           gzip: true,
@@ -40,7 +35,7 @@ function createComputer(window) {
         let timer;
         try {
           const recognized = await Promise.race([
-            worker.recognize(source.thumbnail.toPNG(), {}, { blocks: true }),
+            worker.recognize(image.toPNG(), {}, { blocks: true }),
             new Promise((_, reject) => {
               timer = setTimeout(
                 () => reject(Error("Screen reading timed out.")),
@@ -48,7 +43,7 @@ function createComputer(window) {
               );
             }),
           ]);
-          const size = source.thumbnail.getSize();
+          const size = image.getSize();
           const words = [];
           for (const b of recognized.data.blocks || [])
             for (const p of b.paragraphs || [])

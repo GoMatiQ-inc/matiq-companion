@@ -77,3 +77,10 @@ the application as well as its window, then restore it after input.
 Windows ARM64 diagnostics confirm an interactive WinSta0/Default console
 session; the image's first-boot privacy experience still covers the fixture.
 A temporary read-only UI diagnostic is being used to inspect that CI image.
+
+The Windows screen adapter now captures the primary desktop through native GDI
+into a copied JavaScript-owned BGRA buffer, then downsizes locally for OCR.
+This tests the hypothesis that the ARM runner's Electron thumbnail is stale;
+no OS privacy choice or account setting is changed. It still requires the normal
+interactive desktop. The temporary UI inspection job was removed after retaining
+its result in run 42251526886; new native capture needs actual qualification.
