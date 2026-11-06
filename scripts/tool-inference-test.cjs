@@ -3,6 +3,7 @@ const fs = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const assert = require("node:assert/strict");
+const lifecycle = require("./fixture-lifecycle.cjs");
 const { Projects } = require("../src/projects.cjs");
 const { Tools } = require("../src/tools.cjs");
 const { MODELS } = require("../src/catalog.cjs");
@@ -10,112 +11,79 @@ const { ModelStore } = require("../src/models.cjs");
 const { readWord } = require("../src/documents.cjs");
 (async () => {
   if (!process.env.COMPANION_VALIDATION_MODELS)
-    throw Error(
-      "Set COMPANION_VALIDATION_MODELS to an isolated, verified model store.",
-    );
+    throw Error("Set COMPANION_VALIDATION_MODELS to an isolated, verified model store.");
   const store = new ModelStore(process.env.COMPANION_VALIDATION_MODELS);
   assert.ok(await store.verify(MODELS[0]));
-  const dir = await fs.realpath(
-    await fs.mkdtemp(path.join(os.tmpdir(), "companion-tools-")),
-  );
-  let child;
+  const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-tools-")));
+  let child, owned, runtime, diagnostics = "";
+  const watchdog = setTimeout(() => { process.exitCode=1;child?.kill("SIGKILL"); },180000);
   try {
     const projects = new Projects(path.join(dir, "projects"));
     const project = await projects.create("Tool verification");
     project.tools.documents = true;
     await projects.save(project);
     let calls = 0;
-    const tools = new Tools({
-      projects,
-      approve: async (request) => {
-        assert.equal(request.name, "create_word");
-        calls++;
-        return true;
-      },
-    });
-    child = fork(path.join(__dirname, "../src/inference-worker.cjs"), [], {
-      stdio: ["ignore", "ignore", "pipe", "ipc"],
-    });
-    let diagnostics = "";
-    child.stderr.on("data", (b) => {
-      diagnostics = (diagnostics + b).slice(-2000);
-    });
-    await new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(Error("Tool inference timed out")),
-        180000,
-      );
-      const finish = (error) => {
-        clearTimeout(timer);
-        error ? reject(error) : resolve();
+    const tools = new Tools({projects,approve:async request=>{
+      assert.equal(request.name,"create_word");calls++;return true;
+    }});
+    const executable=process.env.COMPANION_EXECUTABLE_PATH || require("electron");
+    const worker=process.env.COMPANION_EXECUTABLE_PATH
+      ? path.join(path.dirname(executable),process.platform==='darwin'?'../Resources':'resources','app.asar','src','inference-worker.cjs')
+      : path.join(__dirname,'../src/inference-worker.cjs');
+    const bootstrap=path.join(dir,'worker.cjs');
+    await fs.writeFile(bootstrap,`process.send({type:'fixture-runtime',node:process.versions.node,electron:process.versions.electron});require(${JSON.stringify(worker)});`);
+    child=fork(bootstrap,[],{execPath:executable,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','ignore','pipe','ipc']});
+    owned=lifecycle.capture(child);
+    child.stderr.on('data',bytes=>{diagnostics=(diagnostics+bytes).slice(-3000);});
+    child.on('message',message=>{if(message.type==='fixture-runtime')runtime=message;});
+    const prompt=message=>new Promise((resolve,reject)=>{
+      const timer=setTimeout(()=>finish(Error('Worker prompt timed out. Inspect native diagnostics.')),90000);
+      const finish=(error,value)=>{
+        clearTimeout(timer);child.off('error',onError);child.off('exit',onExit);child.off('message',onMessage);
+        error?reject(error):resolve(value);
       };
-      child.on("error", finish);
-      child.on("exit", (code) => {
-        if (code !== null && code !== 0)
-          finish(Error("Worker exited " + code + " " + diagnostics));
-      });
-      child.on("message", async (m) => {
-        if (m.type === "runtime") console.log("Tool worker runtime:", m.gpu);
-        if (m.type === "tool") {
+      const onError=error=>finish(error);
+      const onExit=(code,signal)=>finish(Error(`Worker exited before completing its response (${code??signal}): ${diagnostics}`));
+      const onMessage=async m=>{
+        if(m.type==='tool'){
           try {
-            assert.equal(m.name, "create_word");
-            assert.equal(m.args.path, "proof.docx");
-            const result = await tools.run(project.id, m.name, m.args);
-            child.send({
-              type: "tool-result",
-              id: m.id,
-              result: JSON.stringify(result),
-            });
-            console.log("Actual document tool completed");
-            finish();
-          } catch (e) {
-            finish(e);
-          }
-        } else if (m.type === "error") finish(Error(m.error));
-        else if (m.type === "done") finish();
-      });
-      child.send({
-        type: "prompt",
-        modelPath: store.location(MODELS[0]),
-        history: [],
-        tools: tools
-          .definitions(project)
-          .filter((t) => t.name === "create_word"),
-        system:
-          "You are a local file assistant. Use the create_word tool when asked for a document. Never merely describe doing the task. /no_think",
-        text: 'Call create_word now with path "proof.docx", title "Verification", paragraphs ["Local tools work."]. After the tool succeeds, say Done.',
-      });
+            assert.equal(m.name,'create_word');assert.equal(m.args.path,'proof.docx');
+            const result=await tools.run(project.id,m.name,m.args);
+            child.send({type:'tool-result',id:m.id,result:JSON.stringify(result)});
+          } catch(error){finish(error);}
+        } else if(m.type==='error')finish(Error(m.error));
+        else if(m.type==='done')finish(null,m.text);
+      };
+      child.on('error',onError);child.on('exit',onExit);child.on('message',onMessage);
+      child.send({type:'prompt',history:[],...message});
     });
-    assert.ok(
-      calls > 0,
-      "The real model must invoke the actual document tool.",
-    );
-    const paragraphs = readWord(
-      await fs.readFile(
-        path.join(projects.folder(project.id), "files", "proof.docx"),
-      ),
-    );
-    assert.ok(JSON.stringify(paragraphs).includes("Local tools work."));
-    console.log(
-      "PASS: real local model invoked approved create_word; real DOCX bytes read back.",
-    );
-  } finally {
-    if (child) {
-      const exited = new Promise((resolve) => child.once("exit", resolve));
-      child.kill();
-      await Promise.race([
-        exited,
-        new Promise((_, reject) =>
-          setTimeout(() => {
-            child.kill("SIGKILL");
-            reject(Error("Inference child did not exit"));
-          }, 5000).unref(),
-        ),
-      ]);
+    await prompt({
+      modelPath:store.location(MODELS[0]),
+      tools:tools.definitions(project).filter(t=>t.name==='create_word'),
+      system:'You are a local file assistant. Use create_word when asked for a document. Never merely describe doing the task. /no_think',
+      text:'Call create_word now with path "proof.docx", title "Verification", paragraphs ["Local tools work."]. After the tool succeeds, say Done.'
+    });
+    assert.ok(calls>0,'The real model must invoke the actual document tool.');
+    assert.ok(JSON.stringify(readWord(await fs.readFile(path.join(projects.folder(project.id),'files','proof.docx')))).includes('Local tools work.'));
+    const alternate=path.join(dir,'verified-weight-alias.gguf');
+    try {await fs.link(store.location(MODELS[0]),alternate);} catch(error){if(error.code!=='EXDEV')throw error;await fs.copyFile(store.location(MODELS[0]),alternate);}
+    for(let iteration=0;iteration<5;iteration++){
+      const text=await prompt({modelPath:iteration%2===0?alternate:store.location(MODELS[0]),tools:[],system:'Answer briefly. /no_think',text:'Reply with the word Hello.'});
+      assert.ok(text.trim(),'The reloaded worker must return actual model output.');
     }
-    await fs.rm(dir, { recursive: true, force: true });
+    assert.equal(runtime?.electron,require('electron/package.json').version,'Use the exact Electron runtime shipped with Companion.');
+    assert.equal(Number(runtime.node.split('.')[0]),24,'Qualify the embedded Node major used by the app.');
+    await fs.mkdir('.validation',{recursive:true});
+    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,completedModelReloads:5,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
+    console.log('PASS: actual Electron worker completed document tool, full responses and five native model unload/reload cycles.');
+  } finally {
+    if(child && child.exitCode===null && child.signalCode===null){
+      const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();
+      let timer;
+      try {await Promise.race([exited,new Promise((_,reject)=>{timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error('Inference child did not exit.'));},5000);})]);}
+      finally {clearTimeout(timer);}
+    }
+    await lifecycle.verifyStopped(owned);
+    clearTimeout(watchdog);await fs.rm(dir,{recursive:true,force:true});
   }
-})().catch((e) => {
-  console.error(e);
-  process.exitCode = 1;
-});
+})().catch(error=>{console.error(error);process.exitCode=1;});

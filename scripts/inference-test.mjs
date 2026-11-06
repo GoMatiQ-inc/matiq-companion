@@ -24,7 +24,7 @@ const llama = await getLlama({
   gpu: process.platform === "win32" ? false : "auto",
   logLevel: "error",
 });
-const model = await llama.loadModel({ modelPath: store.location(m), ...(process.env.COMPANION_INFERENCE_DISABLE_MMAP === "1" ? {useMmap:false} : {}) });
+const model = await llama.loadModel({ modelPath: store.location(m) });
 console.log("Native model load mode:", JSON.stringify({mmap:model.useMmap,pid:process.pid,node:process.versions.node}));
 const context = await model.createContext({ contextSize: 2048 });
 try {

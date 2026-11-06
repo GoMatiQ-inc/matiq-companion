@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - name: Verify the native platform and architecture
         run: node -e "const a=require('node:assert/strict');a.equal(process.platform,'${{ matrix.platform }}');a.equal(process.arch,'${{ matrix.arch }}');"
@@ -48,24 +48,7 @@ jobs:
           [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count) { throw ($errors | Out-String) }
       - run: npm run test:computer
-      - name: Compare Windows model lifetime without memory mapping
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
-        env:
-          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-          COMPANION_INFERENCE_DISABLE_MMAP: '1'
-        run: |
-          for ($iteration=1; $iteration -le 5; $iteration++) {
-            Write-Host "Unmapped native model lifecycle $iteration of 5"
-            node scripts/inference-test.mjs
-            if ($LASTEXITCODE -ne 0) {
-              $originalExit=$LASTEXITCODE
-              $env:COMPANION_INFERENCE_DEBUG='1'
-              node scripts/inference-test.mjs
-              throw "Original unmapped lifecycle failed with exit $originalExit. Diagnostic rerun does not replace the failure."
-            }
-          }
-      - name: Compare default Windows mapped model lifetime
+      - name: Verify repeated Windows model lifetimes
         if: runner.os == 'Windows' && runner.arch == 'X64'
         shell: pwsh
         env:
@@ -78,7 +61,7 @@ jobs:
               $originalExit=$LASTEXITCODE
               $env:COMPANION_INFERENCE_DEBUG='1'
               node scripts/inference-test.mjs
-              throw "Original mapped lifecycle failed with exit $originalExit. Diagnostic rerun does not replace the failure."
+              throw "Native model lifecycle failed with exit $originalExit. Diagnostic rerun does not replace the failure."
             }
           }
       - run: node scripts/inference-test.mjs
@@ -111,6 +94,7 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/worker-lifetimes-*.json
             .validation/computer-*.json
             .validation/computer-*.png
             .validation/windows-session.json

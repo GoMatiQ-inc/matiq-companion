@@ -20,6 +20,8 @@ The candidate release pipeline requires independently signed builds and real roo
 
 Microsoft's live identity-validation list on November 6 shows **In Progress**. No new owner document request was confirmed. The historical certificate-profile API error does not establish that the identity request disappeared. Signing configuration alone is not issuance, and unsigned or self-signed installers cannot satisfy distribution gates.
 
+Development and release CI use Node 24, matching Electron 45.2.3's embedded Node 24.22.2 worker runtime. The earlier Node 22 standalone harness intermittently terminated inside model disposal. Run 42270732872 completed five unmapped and five default mapped Windows x64 lifetimes, so that comparison did not isolate mapping as the cause; production memory mapping remains unchanged. The worker fixture now uses the actual Electron executable, awaits the full tool response, then forces five model unload/reload cycles through the production IPC worker. Packaged qualification repeats it from the ASAR worker. Linux passed actual document creation, complete replies, all five reloads and independent worker cleanup; native exact-source results remain required.
+
 ## Reproduce the checks
 
 Use an isolated `COMPANION_VALIDATION_MODELS` directory, never a live user's profile or model store.

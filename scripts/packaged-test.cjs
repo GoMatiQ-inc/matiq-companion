@@ -16,7 +16,7 @@ if (!executable)
   throw Error(
     "Build the native application before running packaged qualification.",
   );
-for (const fixture of ["desktop-test.cjs", "computer-test.cjs"]) {
+for (const fixture of ["desktop-test.cjs", "computer-test.cjs", "tool-inference-test.cjs"]) {
   const result = spawnSync(process.execPath, [path.join(__dirname, fixture)], {
     env: { ...process.env, COMPANION_EXECUTABLE_PATH: executable },
     stdio: "inherit",

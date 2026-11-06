@@ -24,7 +24,7 @@ For later releases, use **Settings → Check for updates → Download update →
 
 ## Development
 
-Use Node 22 or newer. Run `npm ci`, `npm test`, then `npm start`. Linux desktop tests need an X server (`xvfb-run -a npm run test:desktop`). `npm run package` builds the current platform installer without publishing it. Native dependencies must be installed and packaged on the target platform.
+Use Node 24, matching the embedded inference-worker runtime. Run `npm ci`, `npm test`, then `npm start`. Linux desktop tests need an X server (`xvfb-run -a npm run test:desktop`). `npm run package` builds the current platform installer without publishing it. Native dependencies must be installed and packaged on the target platform.
 
 `npm run test:inference` downloads and verifies the smallest catalog model and performs real native inference (Metal on qualified Apple Silicon runners; a CPU baseline on hosted Windows runners). Set `COMPANION_VALIDATION_MODELS` to an isolated model-store directory; never point tests at someone else's live profile. See [model storage](docs/MODELS.md), [security boundaries](docs/SECURITY.md), and [release/update qualification](docs/RELEASES.md).
 
