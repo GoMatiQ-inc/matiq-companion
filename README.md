@@ -4,7 +4,13 @@ A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Down
 
 ## Current status
 
-Initial working implementation, not a production release. Linux unit, real local-model inference and Electron workflow checks are available. Native macOS/Windows installers and computer control still require platform qualification. No signed public release has been published.
+[MatiQ Companion v0.1.0](https://github.com/GoMatiQ-inc/matiq-companion/releases/tag/v0.1.0) includes a signed, notarized Apple Silicon Mac installer. Actual signed download/restart and project/model preservation passed. Windows x64 passes native build and packaged-inference CI; signed Windows distribution is awaiting Microsoft company identity validation and a certificate profile. Computer use remains experimental and needs native privacy/input qualification.
+
+## Install on an Apple Silicon Mac
+
+Download [MatiQ-Companion-0.1.0-mac-arm64.pkg](https://github.com/GoMatiQ-inc/matiq-companion/releases/download/v0.1.0/MatiQ-Companion-0.1.0-mac-arm64.pkg), open the installer and follow macOS prompts. Download a verified local model during setup; model weights are separate from the installer. Intel Macs are not qualified by this release.
+
+For later releases, use **Settings → Check for updates → Download update → Restart to update**. Restart becomes available after the download completes. See the release's checksums and [validation record](docs/VALIDATION.md) for exact scope.
 
 ## Features
 
@@ -20,7 +26,7 @@ Initial working implementation, not a production release. Linux unit, real local
 
 Use Node 22 or newer. Run `npm ci`, `npm test`, then `npm start`. Linux desktop tests need an X server (`xvfb-run -a npm run test:desktop`). `npm run package` builds the current platform installer without publishing it. Native dependencies must be installed and packaged on the target platform.
 
-`npm run test:inference` downloads and verifies the smallest catalog model and performs real CPU inference. Set `COMPANION_VALIDATION_MODELS` to an isolated model-store directory; never point tests at someone else's live profile. See [model storage](docs/MODELS.md), [security boundaries](docs/SECURITY.md), and [release/update qualification](docs/RELEASES.md).
+`npm run test:inference` downloads and verifies the smallest catalog model and performs real native inference (Metal on qualified Apple Silicon runners; a CPU baseline on hosted Windows runners). Set `COMPANION_VALIDATION_MODELS` to an isolated model-store directory; never point tests at someone else's live profile. See [model storage](docs/MODELS.md), [security boundaries](docs/SECURITY.md), and [release/update qualification](docs/RELEASES.md).
 
 ## MatiQ Voice interoperability
 
