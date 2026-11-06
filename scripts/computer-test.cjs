@@ -14,7 +14,9 @@ const {execFileSync}=require('node:child_process');
     ownedApp=lifecycle.capture(app.process());
     const main=await app.firstWindow();
     await main.getByRole('heading',{name:'Your own AI workspace.'}).waitFor();
-    await app.evaluate(({app,BrowserWindow})=>{
+    await app.evaluate(({app,BrowserWindow,desktopCapturer,screen})=>{
+      const original=desktopCapturer.getSources.bind(desktopCapturer);
+      desktopCapturer.getSources=async options=>{const sources=await original(options);const source=sources.find(s=>s.display_id===String(screen.getPrimaryDisplay().id));globalThis.__observedCapture=source?.thumbnail.toPNG().toString('base64');return sources;};
       globalThis.__computer=process.mainModule.require(app.getAppPath()+'/src/computer.cjs').createComputer(BrowserWindow.getAllWindows()[0]);
     });
     const act=(name,args={})=>app.evaluate(async(_,{name,args})=>globalThis.__computer(name,args,new AbortController().signal),{name,args});
@@ -25,7 +27,7 @@ const {execFileSync}=require('node:child_process');
       let setup=await act('observe_screen');
       for(let step=0;step<12 && /Choose\s+privacy\s+settings/i.test(setup.text);step++) {
         desktopPreparation.attempted=true;
-        const png=await app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');});
+        const png=await app.evaluate(()=>globalThis.__observedCapture);
         await fs.mkdir('.validation',{recursive:true});await fs.writeFile('.validation/computer-win32-arm64-initial-privacy.png',Buffer.from(png,'base64'));
         assert.equal(setup.width,1024,'Inspect the changed CI setup layout before automating it.');
         assert.equal(setup.height,768,'Inspect the changed CI setup layout before automating it.');
@@ -81,20 +83,21 @@ const {execFileSync}=require('node:child_process');
     }
     if(process.env.COMPANION_FIXTURE_LAYOUT_DIAGNOSTIC==='1') {
       const capture=async suffix=>{
-        const png=await app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');});
+        const png=await app.evaluate(()=>globalThis.__observedCapture);
         await fs.writeFile(`.validation/computer-${process.platform}-${process.arch}-${suffix}.png`,Buffer.from(png,'base64'));
       };
       const diagnosticDisplay=await app.evaluate(({screen})=>screen.getPrimaryDisplay().size);
       assert.equal(diagnosticDisplay.width,1024,'Reproduce the failing native display before comparing label layout.');
       assert.equal(diagnosticDisplay.height,768);
       await capture('label-before');
-      const before=observed.words.map(w=>w.text);
-      await page.locator('label').evaluate(label=>{label.style.display='block';label.style.marginBottom='24px';});
+      const before=observed.words.map(w=>w.text),beforeWords=observed.words;
+      const beforeWindow=await target.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getBounds());
+      await target.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].maximize());
       await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       observed=await act('observe_screen');
       await capture('label-after');
       const after=observed.words.map(w=>w.text);
-      await fs.writeFile(`.validation/computer-${process.platform}-${process.arch}-label-comparison.json`,JSON.stringify({display:diagnosticDisplay,before,after},null,2)+'\n');
+      await fs.writeFile(`.validation/computer-${process.platform}-${process.arch}-label-comparison.json`,JSON.stringify({display:diagnosticDisplay,before,after,beforeWords,afterWords:observed.words,beforeWindow,afterWindow:await target.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getBounds())},null,2)+'\n');
       console.log('Controlled fixture label comparison:',JSON.stringify({before,after}));
     }
     const label=observed.words.find(w=>/^entry$/i.test(w.text));
