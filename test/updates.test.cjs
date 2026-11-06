@@ -15,7 +15,7 @@ test("updates require explicit download and restart after a completed download",
     u.emit("update-downloaded");
   };
   u.quitAndInstall = (silent, run) => {
-    assert.equal(silent, false);
+    assert.equal(silent, true);
     assert.equal(run, true);
     restarts++;
   };

@@ -10,7 +10,9 @@ const { execFileSync } = require("node:child_process");
 const assert = require("node:assert/strict");
 const lifecycle = require("./fixture-lifecycle.cjs");
 const { waitFor } = require("./wait-for.cjs");
-const { ModelStore } = require("../src/models.cjs");
+const { ModelStore, sharedRoot } = require("../src/models.cjs");
+const windows = process.platform === "win32";
+function powershell(script, env = {}) { return execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",timeout:15000,env:{...process.env,...env}}).trim(); }
 const { MODELS } = require("../src/catalog.cjs");
 const baseVersion = process.env.COMPANION_UPGRADE_BASE_VERSION || require("../package.json").version;
 const targetVersion = process.env.COMPANION_UPGRADE_TARGET_VERSION || baseVersion
@@ -25,6 +27,10 @@ async function hash(file) {
   return digest.digest("hex");
 }
 function processesIn(directory) {
+  if (windows) {
+    const rows=JSON.parse(powershell("$ErrorActionPreference='Stop';$prefix=[IO.Path]::GetFullPath($env:COMPANION_OWNED_DIR).TrimEnd([char]92)+[char]92;@{rows=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($prefix,[StringComparison]::OrdinalIgnoreCase)} | ForEach-Object {$owner=Invoke-CimMethod -InputObject $_ -MethodName GetOwnerSid;if($owner.ReturnValue -ne 0){throw 'Cannot verify the owned process user.'};@{pid=[int]$_.ProcessId;uid=$owner.Sid;executable=$_.ExecutablePath}})} | ConvertTo-Json -Depth 4",{COMPANION_OWNED_DIR:directory})).rows;
+    return rows;
+  }
   return execFileSync("/bin/ps", ["-axww", "-o", "pid=,uid=,comm="], {
     encoding: "utf8",
   })
@@ -44,6 +50,7 @@ function processesIn(directory) {
     });
 }
 function applicationInfo(pid) {
+  if(windows) return JSON.parse(powershell(`$ErrorActionPreference='Stop';$p=Get-Process -Id ${Number(pid)};@{found=$true;finished=($p.MainWindowHandle -ne 0);terminated=$p.HasExited;bundle=(Split-Path $p.Path)}|ConvertTo-Json`));
   const script = `ObjC.import('AppKit');var apps=$.NSRunningApplication.runningApplicationsWithBundleIdentifier('com.matiq.companion');var result={found:false};for(var i=0;i<apps.count;i++){var app=apps.objectAtIndex(i);if(app.processIdentifier===${pid})result={found:true,finished:app.isFinishedLaunching,terminated:app.isTerminated,bundle:ObjC.unwrap(app.bundleURL.path)};}JSON.stringify(result);`;
   return JSON.parse(
     execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], {
@@ -53,6 +60,11 @@ function applicationInfo(pid) {
   );
 }
 async function bundleVersion(apps) {
+  if(windows) {
+    const executable=path.join(apps,'MatiQ Companion.exe');
+    try {await fs.access(executable);}catch(error){if(error.code==='ENOENT')return null;throw error;}
+    return powershell("$ErrorActionPreference='Stop';(Get-Item -LiteralPath $env:COMPANION_OWNED_EXE).VersionInfo.ProductVersion",{COMPANION_OWNED_EXE:executable});
+  }
   const info = path.join(apps, "MatiQ Companion.app/Contents/Info.plist");
   try {
     await fs.access(info);
@@ -67,8 +79,8 @@ async function bundleVersion(apps) {
   ).trim();
 }
 (async () => {
-  if (process.platform !== "darwin")
-    throw Error("Run signed Mac upgrade qualification on macOS.");
+  if (!["darwin","win32"].includes(process.platform))
+    throw Error("Run signed upgrade qualification on native macOS or Windows.");
   if (!process.env.COMPANION_VALIDATION_MODELS)
     throw Error("Supply the isolated verified model store.");
   if (
@@ -82,25 +94,10 @@ async function bundleVersion(apps) {
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "companion-upgrade-")),
   );
-  const profile = path.join(
-    os.homedir(),
-    "Library",
-    "Application Support",
-    "MatiQ Companion",
-  );
-  const modelRoot = path.join(
-    os.homedir(),
-    "Library",
-    "Application Support",
-    "MatiQ",
-    "Models",
-  );
-  const shipIt = path.join(
-    os.homedir(),
-    "Library",
-    "Caches",
-    "com.matiq.companion.ShipIt",
-  );
+  const profile = windows ? path.join(process.env.APPDATA,'MatiQ Companion') : path.join(os.homedir(),'Library','Application Support','MatiQ Companion');
+  const modelRoot = sharedRoot();
+  const updaterCache = path.join(windows ? process.env.LOCALAPPDATA : path.join(os.homedir(),"Library","Caches"),"matiq-companion-updater");
+  const shipIt = windows ? path.join(process.env.LOCALAPPDATA,'matiq-companion-updater') : path.join(os.homedir(),'Library','Caches','com.matiq.companion.ShipIt');
   const apps = path.join(directory, "apps");
   let existingShipIt = false;
   try {
@@ -114,7 +111,7 @@ async function bundleVersion(apps) {
     0,
     "An existing updater process must not be adopted.",
   );
-  for (const owned of [profile, modelRoot]) {
+  for (const owned of [profile, modelRoot, updaterCache]) {
     try {
       await fs.lstat(owned);
       throw Error(
@@ -127,23 +124,23 @@ async function bundleVersion(apps) {
   await fs.mkdir(apps);
   await fs.mkdir(profile, { recursive: true });
   await fs.mkdir(modelRoot, { recursive: true });
+  await fs.mkdir(updaterCache, { recursive: true });
   const marker = randomUUID(),
     baseZip = path.join(
       root,
       "dist",
-      `MatiQ-Companion-${baseVersion}-mac-${process.arch}.zip`,
+      `MatiQ-Companion-${baseVersion}-${windows ? "windows" : "mac"}-${process.arch}.${windows ? "exe" : "zip"}`,
     );
-  for (const owned of [profile, modelRoot])
+  for (const owned of [profile, modelRoot, updaterCache])
     await fs.writeFile(path.join(owned, ".upgrade-owner"), marker, {
       flag: "wx",
       mode: 0o600,
     });
-  execFileSync("/usr/bin/ditto", ["-x", "-k", baseZip, apps], {
-    timeout: 120000,
-  });
+  if(windows) execFileSync(baseZip,['/S','/D='+apps],{timeout:120000});
+  else execFileSync("/usr/bin/ditto", ["-x", "-k", baseZip, apps], {timeout:120000});
   const executable = path.join(
     apps,
-    "MatiQ Companion.app/Contents/MacOS/MatiQ Companion",
+    windows ? "MatiQ Companion.exe" : "MatiQ Companion.app/Contents/MacOS/MatiQ Companion",
   );
   const source = new ModelStore(process.env.COMPANION_VALIDATION_MODELS),
     destination = new ModelStore(modelRoot);
@@ -156,11 +153,11 @@ async function bundleVersion(apps) {
   await fs.mkdir(path.dirname(model), { recursive: true });
   await fs.copyFile(source.location(MODELS[0]), model);
   const targetDirectory = path.join(root, "upgrade-target"),
-    metadataName = "latest-mac.yml";
+    metadataName = windows ? "latest.yml" : "latest-mac.yml";
   const allowed = new Set([
     metadataName,
-    `MatiQ-Companion-${targetVersion}-mac-${process.arch}.zip`,
-    `MatiQ-Companion-${targetVersion}-mac-${process.arch}.zip.blockmap`,
+    `MatiQ-Companion-${targetVersion}-${windows ? "windows" : "mac"}-${process.arch}.${windows ? "exe" : "zip"}`,
+    `MatiQ-Companion-${targetVersion}-${windows ? "windows" : "mac"}-${process.arch}.${windows ? "exe" : "zip"}.blockmap`,
   ]);
   const server = http.createServer(async (req, res) => {
     try {
@@ -334,7 +331,7 @@ async function bundleVersion(apps) {
       if (!processInfo) return false;
       assert.equal(
         processInfo.uid,
-        process.getuid(),
+        windows ? powershell("[Security.Principal.WindowsIdentity]::GetCurrent().User.Value") : process.getuid(),
         "The new app must run as the same user.",
       );
       const info = applicationInfo(processInfo.pid);
@@ -344,7 +341,7 @@ async function bundleVersion(apps) {
     }, "Signed replacement and automatic restart");
     assert.equal(
       await fs.realpath(applicationInfo(launch.pid).bundle),
-      await fs.realpath(path.join(apps, "MatiQ Companion.app")),
+      await fs.realpath(windows ? apps : path.join(apps, "MatiQ Companion.app")),
     );
     const after = {
       project: await hash(projectFile),
@@ -355,18 +352,18 @@ async function bundleVersion(apps) {
     assert.deepEqual(after, before, "Upgrade changed retained user data.");
     assert.equal(await fs.readFile(generated, "utf8"), marker);
     const proof = {
-      platform: "darwin",
+      platform: process.platform,
       arch: process.arch,
       baseVersion,
       targetVersion,
       signedDownloadRestart: true,
       automaticRelaunch: true,
       observation:
-        "macOS finished-launching bundle, replaced version and new same-user PID",
+        windows ? "native window handle, replaced executable version and new same-user PID" : "macOS finished-launching bundle, replaced version and new same-user PID",
       dataPaths:
         "unchanged default profile and shared model store on disposable CI VM",
       baseZipSha256: await hash(baseZip),
-      targetZipSha256: await hash(path.join(targetDirectory,`MatiQ-Companion-${targetVersion}-mac-${process.arch}.zip`)),
+      targetZipSha256: await hash(path.join(targetDirectory,`MatiQ-Companion-${targetVersion}-${windows ? "windows" : "mac"}-${process.arch}.${windows ? "exe" : "zip"}`)),
       retained: {
         project: true,
         settings: true,
@@ -443,13 +440,19 @@ async function bundleVersion(apps) {
       0,
       "Owned updater processes remain.",
     );
-    for (const owned of [profile, modelRoot]) {
+    for (const owned of [profile, modelRoot, updaterCache]) {
       assert.equal(
         await fs.readFile(path.join(owned, ".upgrade-owner"), "utf8"),
         marker,
         "Owned cleanup marker changed; inspect before removal.",
       );
       await fs.rm(owned, { recursive: true });
+    }
+    if(windows) {
+      const uninstaller=path.join(apps,'Uninstall MatiQ Companion.exe');
+      await fs.access(uninstaller);
+      execFileSync(uninstaller,['/S','_?='+apps],{timeout:60000});
+      assert.equal(processesIn(apps).length,0,'The owned uninstaller process remains.');
     }
     if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });

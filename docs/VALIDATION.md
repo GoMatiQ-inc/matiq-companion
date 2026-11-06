@@ -60,3 +60,11 @@ Microsoft's live identity-validation list on November 6 shows **In Progress**.
 The profile still awaits issuer approval. No additional owner document request
 was confirmed; the previous profile API error is historical, not evidence that
 the live identity request disappeared.
+
+The signed upgrade harness also supports Windows per-user NSIS installation,
+actual downloaded installer/relaunch, same-user PID/window/version observations,
+and owned uninstallation/cache cleanup. CI wires independent x64 and ARM64
+signed upgrade jobs. These paths remain **unqualified until Microsoft issues the
+company certificate profile**; no unsigned installer or self-signed substitute
+is accepted as evidence. Explicit Restart applies downloaded updates silently
+and reopens the app; automatic install-on-quit remains disabled.

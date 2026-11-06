@@ -39,6 +39,14 @@ jobs:
           enableCrossOsArchive: true
       - run: npm ci
       - run: npm test
+      - name: Parse the Windows distribution verifier
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
       - run: npm run test:inference
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
@@ -48,6 +56,10 @@ jobs:
       - run: npm run test:desktop
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - name: Inspect native Windows desktop session
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/inspect-windows-session.ps1
       - run: npm run test:computer
       - run: npm run package
       - run: npm run test:packaged
@@ -67,3 +79,4 @@ jobs:
             dist/*.yml
             dist/*.blockmap
             .validation/computer-*.json
+            .validation/windows-session.json

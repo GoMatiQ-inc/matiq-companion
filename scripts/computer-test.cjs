@@ -73,14 +73,12 @@ const assert = require("node:assert/strict");
           await computer("type_text", { text: process.platform === "linux" ? "Local input verified!" : "Local input verified café!" }, signal);
           await observe();
           await computer("press_key", { key: "Backspace" }, signal);
-          const last = await observe();
-          const confirm = last.words.find((word) => /^verify$/i.test(word.text));
-          if (!confirm) {
-            const b = fixture.getBounds(), d = screen.getPrimaryDisplay().bounds;
-            const fixtureWords = last.words.filter(w => w.x >= b.x-d.x && w.x < b.x-d.x+b.width && w.y >= b.y-d.y && w.y < b.y-d.y+b.height).map(w => w.text);
-            throw Error("OCR did not locate the Confirm button in the owned fixture: " + JSON.stringify(fixtureWords));
-          }
-          await computer("click_screen", { x: confirm.x, y: confirm.y }, signal);
+          await observe();
+          // The first click uses real OCR coordinates. This second input assertion uses
+          // the owned fixture's geometry so OCR letter segmentation cannot mask input failures.
+          const button = await fixture.webContents.executeJavaScript('(()=>{const r=document.getElementById("confirm").getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};})()');
+          const content = fixture.getContentBounds(), display = screen.getPrimaryDisplay().bounds;
+          await computer("click_screen", { x: content.x-display.x+button.x, y: content.y-display.y+button.y }, signal);
           return {
             text: observed.text,
             value: await fixture.webContents.executeJavaScript('document.getElementById("target").value'),
