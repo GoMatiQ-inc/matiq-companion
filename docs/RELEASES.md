@@ -1,22 +1,23 @@
 # Installers, releases and updates
 
-`npm run package` builds a macOS DMG plus ZIP or a Windows NSIS installer. The ZIP and update metadata are required by the macOS updater; Windows needs the NSIS installer, blockmap and latest YAML. Release assets must remain together on the matching versioned GitHub release. Replacing a model does not require an app update.
+Development packages are macOS DMG/ZIP and Windows NSIS. Signed Mac distribution uses a Developer ID Installer PKG plus the signed application ZIP, matching the proven MatiQ Voice signing path. The ZIP and latest-mac.yml are required for in-app Mac updates; Windows needs the NSIS installer, blockmap and latest.yml. Keep each release's verified assets together.
 
-Updates are user initiated: Settings → check → download → restart to update. Automatic background downloads and automatic install-on-quit are disabled. Restart is blocked while a chat or model download is active. Development checkouts report that updates are unavailable. Projects and models are stored outside the installed app, and Windows uninstall preserves application data by default.
+Settings provides check → download → restart. Background download and install-on-quit are disabled. Restart is blocked during a chat/model download. Projects and models are outside the application bundle; uninstall preserves application data.
 
-## Qualification before publishing
+## Shared company signing
 
-1. Pass unit tests, real inference, renderer/IPC and package checks on each supported native platform/architecture. Test macOS Apple Silicon and Windows x64 first; Intel Mac/Windows ARM are not yet qualified.
-2. Configure dedicated code-signing credentials through the repository's protected `release` environment. macOS requires Developer ID signing and notarization; Windows requires a trusted code-signing identity. No credentials are committed or copied from another app.
-3. Publish a signed prerelease, install it on clean native machines, then publish the next signed prerelease and verify check/download/restart plus project/model preservation. Check tampered/untrusted assets fail and interrupted downloads recover visibly.
-4. Promote only after that real two-version upgrade succeeds. Unit tests of updater events do not prove installer trust or OS integration.
+Companion reuses the company Developer ID Application and Installer certificates and notarization account used by Voice. Its bundle ID remains `com.matiq.companion` and its GitHub feed remains `GoMatiQ-inc/matiq-companion`. Signing identity reuse does not merge applications or data. No new certificate or developer subscription is needed per app.
 
-The `checks` workflow builds unsigned/ad-hoc development installer artifacts for review. It never publishes releases or enables unattended user upgrades. The repository currently has no configured signing secrets; public update release publication remains a qualification gate. Do not mark a source commit as a shipped update.
+The tag-restricted `release-signing` environment uses the existing names `CSC_LINK`, `CSC_KEY_PASSWORD`, `CSC_NAME`, `CSC_INSTALLER_LINK`, `CSC_INSTALLER_KEY_PASSWORD`, `CSC_INSTALLER_NAME`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID`. Secrets are scoped to signing steps; package installation and model tests do not receive them. Native signing uses a temporary keychain and restores/removes it in finally cleanup.
 
-## Release automation
+Windows reuses the existing Azure signer with a separate GitHub OIDC trust for this repository/environment. Its configuration uses `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID`, `MATIQ_AZURE_SIGN_ENDPOINT`, `MATIQ_AZURE_SIGN_ACCOUNT`, `MATIQ_AZURE_SIGN_PROFILE` and the actual verified `MATIQ_WINDOWS_PUBLISHER`. A missing/unapproved Microsoft certificate profile is an external issuance blocker; do not substitute a self-signed certificate or a guessed publisher.
 
-A version-matching `v*` tag runs the signed release workflow. Both native jobs must pass and signing/notarization configuration must be present before assets are assembled into a **draft** GitHub release. Publishing that qualified draft makes the update discoverable to installed clients. Ordinary source pushes run development checks; they do not force unfinished code onto users.
+## Validation and publication
 
-The protected `release` environment uses `MAC_CSC_LINK`, `MAC_CSC_KEY_PASSWORD`, `MAC_CSC_NAME`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`, `WIN_CSC_LINK` and `WIN_CSC_KEY_PASSWORD`. These are dedicated distribution identities, not user login credentials. Never commit them or include values in logs. Windows signing must match the configured publisher name.
+Use a `v<package-version>-signing.<n>` tag pointing to source merged into main, then dispatch Prepare signed release with platform mac/windows/both. This validates without publication. The environment permits version tags only. A normal matching stable tag builds both platforms into a draft; it does not silently publish.
 
-Native Node-API dependencies are shipped from their verified platform installations; `npmRebuild: false` avoids rebuilding the llama runtime for an Electron ABI it does not require. Each native CI build must launch the packaged application and complete actual local inference before upload, so missing native libraries or broken ASAR paths fail the job. macOS development builds use an ad-hoc signature; release builds override it with the required Developer ID identity.
+Qualification must include unit/security tests, actual model inference/tool use, packaged runtime, Developer ID/native signatures, notarization, stapling, Gatekeeper, extracted update ZIP verification and exact YAML checksum/size validation. Windows requires matching publisher, native Authenticode and timestamp verification. Signing checks fail visibly.
+
+Before publishing updates, qualify a real signed two-version download/restart and confirm projects/models survive. Native computer capture/input still requires supported-OS privacy-permission qualification. Do not confuse a green unsigned build or a signing credential being configured with a verified signed update.
+
+Node-API libraries ship from the platform installation with `npmRebuild: false`. Native CI launches the packaged app to catch ASAR/library discovery failures. Development Mac builds use an ad-hoc signature; release builds require Developer ID.

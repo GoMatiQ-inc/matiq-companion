@@ -1,36 +1,45 @@
 name: Prepare signed release
 on:
   push:
-    tags: ['v*']
+    tags: ['v*', '!v*-signing.*']
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Validate existing signing on a release-validation tag, without publication
+        type: choice
+        options: [mac, windows, both]
+        default: mac
 permissions:
   contents: read
+concurrency:
+  group: signed-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   signed:
-    environment: release
+    environment: release-signing
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: ${{ fromJSON(inputs.platform == 'mac' && '["macos-latest"]' || inputs.platform == 'windows' && '["windows-latest"]' || '["macos-latest","windows-latest"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
-    env:
-      CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_LINK || secrets.WIN_CSC_LINK }}
-      CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CSC_KEY_PASSWORD || secrets.WIN_CSC_KEY_PASSWORD }}
-      CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
-      APPLE_ID: ${{ secrets.APPLE_ID }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Require source merged into main and matching version tag
+        shell: bash
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          node -e "const v=require('./package.json').version;const tag=process.env.GITHUB_REF_NAME;if(tag !== 'v'+v && !tag.startsWith('v'+v+'-signing.'))throw Error('Use the matching release or signing-validation tag')"
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - name: Verify tag matches package version
-        run: node -e "if(process.env.GITHUB_REF_NAME !== 'v'+require('./package.json').version)throw Error('Tag must match package version')"
-      - name: Require real signing configuration
-        run: node -e "require('./scripts/release-config.cjs')"
-      - run: npm ci
+      - run: npm ci --no-audit --no-fund
       - run: npm test
       - run: npm run test:inference
         env:
@@ -38,25 +47,65 @@ jobs:
       - run: npm run test:tools
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-      - run: npm run test:desktop
+      - name: Authenticate the existing Windows signer with scoped OIDC
+        if: runner.os == 'Windows'
+        uses: azure/login@935127ca5bb3c4b02c9c2c10060028383878f33f
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+      - name: Sign and notarize using existing company Apple identities
+        if: runner.os == 'macOS'
+        run: npm run package:release
         env:
-          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-      - run: npx --no-install electron-builder --config scripts/release-config.cjs --publish never
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+          CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+          CSC_INSTALLER_NAME: ${{ secrets.CSC_INSTALLER_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Sign Windows app and installer using the existing Azure profile
+        if: runner.os == 'Windows'
+        run: npm run package:release
+        env:
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          MATIQ_AZURE_SIGN_ENDPOINT: ${{ secrets.MATIQ_AZURE_SIGN_ENDPOINT }}
+          MATIQ_AZURE_SIGN_ACCOUNT: ${{ secrets.MATIQ_AZURE_SIGN_ACCOUNT }}
+          MATIQ_AZURE_SIGN_PROFILE: ${{ secrets.MATIQ_AZURE_SIGN_PROFILE }}
+          MATIQ_WINDOWS_PUBLISHER: ${{ secrets.MATIQ_WINDOWS_PUBLISHER }}
+      - name: Verify signatures, notarization, stapling, Gatekeeper and update bytes
+        if: runner.os == 'macOS'
+        run: npm run test:signatures
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_INSTALLER_NAME: ${{ secrets.CSC_INSTALLER_NAME }}
+      - name: Verify Windows publisher, native signatures and timestamps
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-signing.ps1
+        env:
+          MATIQ_WINDOWS_PUBLISHER: ${{ secrets.MATIQ_WINDOWS_PUBLISHER }}
       - run: npm run test:packaged
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/upload-artifact@v4
         with:
           name: signed-${{ matrix.os }}
-          retention-days: 3
+          retention-days: 7
           if-no-files-found: error
           path: |
-            dist/*.dmg
+            dist/*.pkg
             dist/*.zip
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            dist/*-signature.json
   draft:
+    if: github.event_name == 'push'
     needs: signed
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -72,4 +121,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" assets/* --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Signed build awaiting native install and two-version upgrade qualification. Publish only after completing docs/RELEASES.md."
+        run: gh release create "$GITHUB_REF_NAME" assets/* --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Signed build awaiting native two-version upgrade qualification. Publish only after completing docs/RELEASES.md."
