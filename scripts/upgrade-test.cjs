@@ -417,11 +417,17 @@ async function bundleVersion(apps) {
       JSON.stringify(diagnostic, null, 2) + "\n",
     );
     console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
-    for (const process of [...processesIn(apps), ...processesIn(shipIt)]) {
-      const snapshot = lifecycle.capture({ pid: process.pid });
-      global.process.kill(process.pid, "SIGTERM");
-      await lifecycle.verifyStopped(snapshot);
+    const remaining = [...processesIn(apps), ...processesIn(shipIt)].map(
+      (process) => lifecycle.capture({ pid: process.pid }),
+    );
+    for (const snapshot of remaining) {
+      try {
+        process.kill(snapshot.pid, "SIGTERM");
+      } catch (error) {
+        if (error.code !== "ESRCH") throw error;
+      }
     }
+    for (const snapshot of remaining) await lifecycle.verifyStopped(snapshot);
     await lifecycle.verifyStopped(owned);
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
