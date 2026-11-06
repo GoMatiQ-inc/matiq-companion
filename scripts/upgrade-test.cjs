@@ -299,7 +299,7 @@ async function bundleVersion(apps) {
     await app.evaluate(({ app }, url) => {
       app.setPath(
         "cache",
-        process.env.COMPANION_TEST_PROFILE + "/update-cache",
+        require("node:path").join(app.getPath("userData"), "update-cache"),
       );
       const updater =
         process.mainModule.require("electron-updater").autoUpdater;
