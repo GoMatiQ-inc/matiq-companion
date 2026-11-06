@@ -1,6 +1,6 @@
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
-const { createReadStream } = require("node:fs");
+const { createReadStream, realpathSync } = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const http = require("node:http");
@@ -31,34 +31,119 @@ async function waitFor(operation, description, timeout = 90000) {
   throw Error(description + " timed out. Inspect the native updater logs.");
 }
 function processesIn(directory) {
-  return execFileSync("/bin/ps", ["-axo", "pid=,comm="], { encoding: "utf8" })
+  return execFileSync("/bin/ps", ["-axww", "-o", "pid=,uid=,comm="], {
+    encoding: "utf8",
+  })
     .split("\n")
     .flatMap((line) => {
-      const match = /^\s*(\d+)\s+(.+)$/.exec(line);
-      return match && match[2].startsWith(directory + path.sep)
-        ? [{ pid: Number(match[1]), executable: match[2] }]
+      const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line);
+      if (!match) return [];
+      let executable = match[3];
+      try {
+        executable = realpathSync(executable);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+      return executable.startsWith(directory + path.sep)
+        ? [{ pid: Number(match[1]), uid: Number(match[2]), executable }]
         : [];
     });
+}
+function applicationInfo(pid) {
+  const script = `ObjC.import('AppKit');var apps=$.NSRunningApplication.runningApplicationsWithBundleIdentifier('com.matiq.companion');var result={found:false};for(var i=0;i<apps.count;i++){var app=apps.objectAtIndex(i);if(app.processIdentifier===${pid})result={found:true,finished:app.isFinishedLaunching,terminated:app.isTerminated,bundle:ObjC.unwrap(app.bundleURL.path)};}JSON.stringify(result);`;
+  return JSON.parse(
+    execFileSync("/usr/bin/osascript", ["-l", "JavaScript", "-e", script], {
+      encoding: "utf8",
+      timeout: 15000,
+    }),
+  );
+}
+async function bundleVersion(apps) {
+  const info = path.join(apps, "MatiQ Companion.app/Contents/Info.plist");
+  try {
+    await fs.access(info);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  return execFileSync(
+    "/usr/bin/plutil",
+    ["-extract", "CFBundleShortVersionString", "raw", "-o", "-", info],
+    { encoding: "utf8", timeout: 15000 },
+  ).trim();
 }
 (async () => {
   if (process.platform !== "darwin")
     throw Error("Run signed Mac upgrade qualification on macOS.");
   if (!process.env.COMPANION_VALIDATION_MODELS)
     throw Error("Supply the isolated verified model store.");
+  if (
+    process.env.GITHUB_ACTIONS !== "true" ||
+    process.env.RUNNER_ENVIRONMENT !== "github-hosted"
+  )
+    throw Error(
+      "Run default-profile upgrade qualification only on a fresh disposable GitHub-hosted VM.",
+    );
   const root = path.resolve(__dirname, "..");
   const directory = await fs.realpath(
     await fs.mkdtemp(path.join(os.tmpdir(), "companion-upgrade-")),
   );
-  const profile = path.join(directory, "profile"),
-    apps = path.join(directory, "apps");
+  const profile = path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "MatiQ Companion",
+  );
+  const modelRoot = path.join(
+    os.homedir(),
+    "Library",
+    "Application Support",
+    "MatiQ",
+    "Models",
+  );
+  const shipIt = path.join(
+    os.homedir(),
+    "Library",
+    "Caches",
+    "com.matiq.companion.ShipIt",
+  );
+  const apps = path.join(directory, "apps");
+  let existingShipIt = false;
+  try {
+    await fs.lstat(shipIt);
+    existingShipIt = true;
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  assert.equal(
+    processesIn(shipIt).length,
+    0,
+    "An existing updater process must not be adopted.",
+  );
+  for (const owned of [profile, modelRoot]) {
+    try {
+      await fs.lstat(owned);
+      throw Error(
+        "Refusing to touch an existing app/model/updater profile: " + owned,
+      );
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+  }
   await fs.mkdir(apps);
-  await fs.mkdir(profile);
+  await fs.mkdir(profile, { recursive: true });
+  await fs.mkdir(modelRoot, { recursive: true });
   const marker = randomUUID(),
     baseZip = path.join(
       root,
       "dist",
       `MatiQ-Companion-${baseVersion}-mac-${process.arch}.zip`,
     );
+  for (const owned of [profile, modelRoot])
+    await fs.writeFile(path.join(owned, ".upgrade-owner"), marker, {
+      flag: "wx",
+      mode: 0o600,
+    });
   execFileSync("/usr/bin/ditto", ["-x", "-k", baseZip, apps], {
     timeout: 120000,
   });
@@ -67,7 +152,7 @@ function processesIn(directory) {
     "MatiQ Companion.app/Contents/MacOS/MatiQ Companion",
   );
   const source = new ModelStore(process.env.COMPANION_VALIDATION_MODELS),
-    destination = new ModelStore(path.join(profile, "test-models"));
+    destination = new ModelStore(modelRoot);
   assert.equal(
     await source.verify(MODELS[0]),
     true,
@@ -141,7 +226,7 @@ function processesIn(directory) {
     port,
     successful = false;
   const watchdog = setTimeout(() => {
-    for (const process of processesIn(apps))
+    for (const process of [...processesIn(apps), ...processesIn(shipIt)])
       try {
         global.process.kill(process.pid, "SIGKILL");
       } catch (error) {
@@ -158,13 +243,19 @@ function processesIn(directory) {
       args: [],
       env: {
         ...process.env,
-        COMPANION_TEST_PROFILE: profile,
-        COMPANION_UPGRADE_TEST: "1",
       },
     });
     handle = app.process();
     owned = lifecycle.capture(handle);
     const page = await app.firstWindow();
+    const actualProfile = await app.evaluate(({ app }) =>
+      app.getPath("userData"),
+    );
+    assert.equal(
+      await fs.realpath(actualProfile),
+      await fs.realpath(profile),
+      "Qualification must use the real default user-data location.",
+    );
     await page
       .getByRole("heading", { name: "Your own AI workspace." })
       .waitFor();
@@ -245,22 +336,26 @@ function processesIn(directory) {
       .getByRole("button", { name: "Restart to update", exact: true })
       .click();
     const launch = await waitFor(async () => {
-      let receipt;
-      try {
-        receipt = JSON.parse(
-          await fs.readFile(path.join(profile, "upgrade-launch.json"), "utf8"),
-        );
-      } catch (error) {
-        if (error.code === "ENOENT") return false;
-        throw error;
-      }
-      return receipt.version === targetVersion && receipt.pid !== handle.pid
-        ? receipt
+      if ((await bundleVersion(apps)) !== targetVersion) return false;
+      const processInfo = processesIn(apps).find(
+        (info) =>
+          info.executable === realpathSync(executable) &&
+          info.pid !== handle.pid,
+      );
+      if (!processInfo) return false;
+      assert.equal(
+        processInfo.uid,
+        process.getuid(),
+        "The new app must run as the same user.",
+      );
+      const info = applicationInfo(processInfo.pid);
+      return info.found && info.finished && !info.terminated
+        ? { ...processInfo, version: targetVersion }
         : false;
     }, "Signed replacement and automatic restart");
-    assert.ok(
-      processesIn(apps).some((process) => process.pid === launch.pid),
-      "The replacement must be a running owned application.",
+    assert.equal(
+      await fs.realpath(applicationInfo(launch.pid).bundle),
+      await fs.realpath(path.join(apps, "MatiQ Companion.app")),
     );
     const after = {
       project: await hash(projectFile),
@@ -276,6 +371,11 @@ function processesIn(directory) {
       targetVersion,
       signedDownloadRestart: true,
       automaticRelaunch: true,
+      observation:
+        "macOS finished-launching bundle, replaced version and new same-user PID",
+      dataPaths:
+        "unchanged default profile and shared model store on disposable CI VM",
+      baseZipSha256: await hash(baseZip),
       retained: {
         project: true,
         settings: true,
@@ -299,12 +399,33 @@ function processesIn(directory) {
     clearTimeout(watchdog);
     if (handle && handle.exitCode === null && handle.signalCode === null)
       await app.close();
-    await lifecycle.verifyStopped(owned);
-    for (const process of processesIn(apps)) {
+    const diagnostic = {
+      successful,
+      installedVersion: await bundleVersion(apps),
+      processes: [...processesIn(apps), ...processesIn(shipIt)],
+      logs: {},
+    };
+    for (const name of ["ShipIt_stderr.log", "ShipIt_stdout.log"]) {
+      try {
+        diagnostic.logs[name] = (
+          await fs.readFile(path.join(shipIt, name), "utf8")
+        ).slice(-16000);
+      } catch (error) {
+        if (error.code !== "ENOENT") throw error;
+      }
+    }
+    await fs.mkdir(path.join(root, ".validation"), { recursive: true });
+    await fs.writeFile(
+      path.join(root, ".validation", "upgrade-diagnostic.json"),
+      JSON.stringify(diagnostic, null, 2) + "\n",
+    );
+    console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
+    for (const process of [...processesIn(apps), ...processesIn(shipIt)]) {
       const snapshot = lifecycle.capture({ pid: process.pid });
       global.process.kill(process.pid, "SIGTERM");
       await lifecycle.verifyStopped(snapshot);
     }
+    await lifecycle.verifyStopped(owned);
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
     if (port)
@@ -319,10 +440,19 @@ function processesIn(directory) {
         );
       });
     assert.equal(
-      processesIn(apps).length,
+      [...processesIn(apps), ...processesIn(shipIt)].length,
       0,
       "Owned updater processes remain.",
     );
+    for (const owned of [profile, modelRoot]) {
+      assert.equal(
+        await fs.readFile(path.join(owned, ".upgrade-owner"), "utf8"),
+        marker,
+        "Owned cleanup marker changed; inspect before removal.",
+      );
+      await fs.rm(owned, { recursive: true });
+    }
+    if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });
     console.log("PASS: upgrade fixture process and loopback port cleanup.");
   }

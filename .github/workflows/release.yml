@@ -127,6 +127,13 @@ jobs:
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: signed-upgrade-diagnostics
+          retention-days: 3
+          if-no-files-found: ignore
+          path: .validation/upgrade-diagnostic.json
+      - uses: actions/upload-artifact@v4
         with:
           name: signed-${{ matrix.os }}
           retention-days: 7

@@ -47,6 +47,7 @@ jobs:
           proof=json.loads((folder/'mac-signature.json').read_text());upgrade=json.loads((folder/'upgrade-proof.json').read_text())
           assert proof['version']==version and proof['artifact']==pkg and proof['platform']=='darwin' and all(proof.get(k) is True for k in ['signed','notarized','stapled']),'Require real Apple signature, notarization and stapling proof.'
           assert upgrade['baseVersion']==version and upgrade['signedDownloadRestart'] is True and upgrade['automaticRelaunch'] is True and all(upgrade['retained'].get(k) is True for k in ['project','settings','modelSha256','generatedFile']),'Require actual signed upgrade and retained data proof.'
+          assert upgrade['baseZipSha256']==proof['assets'][zip_name],'Upgrade proof must cover this exact base ZIP.'
           published=present-{'mac-signature.json','upgrade-proof.json'}
           assert set(proof['assets'])==published,'Signature proof must cover every downloadable asset.'
           lines=[]
