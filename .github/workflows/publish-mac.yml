@@ -43,7 +43,11 @@ jobs:
           assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',version) and metadata['build']['appId']=='com.matiq.companion','Require the Companion identity and a stable three-part version.'
           gh('run','download',run_id,'--repo',repo,'--name','signed-macos-latest','--dir','release-assets')
           gh('run','download',run_id,'--repo',repo,'--name','mac-upgrade-proof','--dir','release-assets')
-          folder=pathlib.Path('release-assets');pkg=f'MatiQ-Companion-{version}-mac-arm64.pkg';zip_name=f'MatiQ-Companion-{version}-mac-arm64.zip'
+          folder=pathlib.Path('release-assets')
+          diagnostic=folder/'builder-debug.yml'
+          if diagnostic.exists():
+              diagnostic.unlink();print('Excluded build-only builder-debug.yml; release assets still require exact signature-manifest coverage.')
+          pkg=f'MatiQ-Companion-{version}-mac-arm64.pkg';zip_name=f'MatiQ-Companion-{version}-mac-arm64.zip'
           required={pkg,zip_name,'latest-mac.yml','mac-signature.json','upgrade-proof.json'};optional={zip_name+'.blockmap'};present={p.name for p in folder.iterdir()}
           assert required<=present and present<=required|optional,'Unexpected or incomplete signed artifact set.'
           proof=json.loads((folder/'mac-signature.json').read_text());upgrade=json.loads((folder/'upgrade-proof.json').read_text())
