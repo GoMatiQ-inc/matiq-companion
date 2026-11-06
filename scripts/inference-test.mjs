@@ -1,8 +1,4 @@
-import {
-  getLlama,
-  LlamaChatSession,
-  defineChatSessionFunction,
-} from "node-llama-cpp";
+import { getLlama, LlamaChatSession } from "node-llama-cpp";
 import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { ModelStore } = require("../src/models.cjs");
@@ -13,7 +9,12 @@ if (!dir)
 const store = new ModelStore(dir),
   m = MODELS[0];
 await store.download(m, AbortSignal.timeout(120000), () => {});
-const llama = await getLlama({ build: "never", logLevel: "error" });
+// Hosted Windows runners have no supported GPU; the packaged workflow still exercises automatic hardware selection.
+const llama = await getLlama({
+  build: "never",
+  gpu: process.platform === "win32" ? false : "auto",
+  logLevel: "error",
+});
 const model = await llama.loadModel({ modelPath: store.location(m) });
 const context = await model.createContext({ contextSize: 2048 });
 try {
