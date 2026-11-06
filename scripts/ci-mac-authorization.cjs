@@ -6,7 +6,7 @@ const keys=['GITHUB_ACTIONS','RUNNER_ENVIRONMENT','GITHUB_REPOSITORY','GITHUB_RU
 const args=['-n','/usr/bin/env',...keys.map(key=>key+'='+process.env[key]),'/usr/bin/python3',path.join(__dirname,'ci-mac-authorization.py')];
 const invoke=(operation,data={})=>JSON.parse(execFileSync('/usr/bin/sudo',[...args,operation],{input:JSON.stringify(data),encoding:'utf8',timeout:100000}));
 function createAuthorizationFixture(){
-  let password=randomBytes(24).toString('hex')+'aA7!';
+  let password=randomBytes(32).toString('hex');
   let identity;
   try {identity=invoke('create',{password});}
   catch(error){invoke('delete');password='';throw error;}
