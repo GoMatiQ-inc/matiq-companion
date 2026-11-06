@@ -19,7 +19,8 @@ security.AuthorizationCreate.argtypes = [c.POINTER(Items), c.POINTER(Items), c.c
 security.AuthorizationCreate.restype = c.c_int32
 security.AuthorizationFree.argtypes = [c.c_void_p, c.c_uint32]
 security.AuthorizationFree.restype = c.c_int32
-right_item = Item(b"system.daemons.modify", 0, None, 0)
+# kSMRightModifySystemDaemons from Apple ServiceManagement.h; also used by Squirrel.
+right_item = Item(b"com.apple.ServiceManagement.daemons.modify", 0, None, 0)
 rights = Items(1, c.pointer(right_item))
 def authorize(password=None):
     ref = c.c_void_p()
