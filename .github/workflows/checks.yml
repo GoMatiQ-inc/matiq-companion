@@ -94,6 +94,7 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/desktop-*-failure.*
             .validation/worker-lifetimes-*.json
             .validation/computer-*.json
             .validation/computer-*.png

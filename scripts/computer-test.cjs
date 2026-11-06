@@ -128,8 +128,9 @@ const {execFileSync}=require('node:child_process');
     await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-failure.json`),JSON.stringify({platform:process.platform,arch:process.arch,error:error.message,appPid:app?.process().pid,targetPid:target?.process().pid},null,2)+'\n');
     throw error;
   } finally {
+    const tree=[...lifecycle.captureTree(ownedApp),...lifecycle.captureTree(ownedTarget)];
     await app?.close();await target?.close();
-    await lifecycle.verifyStopped(ownedApp);await lifecycle.verifyStopped(ownedTarget);
+    for(const process of tree)await lifecycle.verifyStopped(process);
     clearTimeout(timer);await fs.rm(profile,{recursive:true,force:true});
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});

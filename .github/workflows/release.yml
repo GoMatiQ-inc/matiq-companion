@@ -267,6 +267,10 @@ jobs:
         with:
           name: verified-windows-upgrade-target-${{ runner.arch }}
           path: upgrade-target
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-windows-upgrade-target-${{ runner.arch == 'ARM64' && 'X64' || 'ARM64' }}
+          path: other-upgrade-target
       - name: Qualify signed per-user installation, download, restart and retained data
         timeout-minutes: 8
         run: npm run test:upgrade
@@ -286,70 +290,69 @@ jobs:
           if-no-files-found: error
           path: dist/upgrade-proof.json
   published-upgrade:
+    name: published-upgrade (${{ matrix.os }})
     needs: signed
-    if: inputs.platform != 'windows'
-    runs-on: macos-latest
-    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.platform == 'mac' && '[{"os":"macos-latest","other_os":"macos-15-intel"}]' || inputs.platform == 'windows' && '[{"os":"windows-latest","other_os":"windows-11-arm"},{"os":"windows-11-arm","other_os":"windows-latest"}]' || '[{"os":"macos-latest","other_os":"macos-15-intel"},{"os":"windows-latest","other_os":"windows-11-arm"},{"os":"windows-11-arm","other_os":"windows-latest"}]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
+      - name: Inspect and checksum the current public release
+        id: previous
+        run: node scripts/prepare-public-upgrade.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/cache@v4
+        if: steps.previous.outputs.has_previous == '1'
         with:
           path: ${{ runner.temp }}/companion-models
           key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
           enableCrossOsArchive: true
       - run: npm ci --no-audit --no-fund
+        if: steps.previous.outputs.has_previous == '1'
       - run: npm run test:inference
+        if: steps.previous.outputs.has_previous == '1'
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/download-artifact@v4
+        if: steps.previous.outputs.has_previous == '1'
         with:
-          name: signed-macos-latest
+          name: signed-${{ matrix.os }}
           path: upgrade-target
       - uses: actions/download-artifact@v4
+        if: steps.previous.outputs.has_previous == '1'
         with:
-          name: signed-macos-15-intel
+          name: signed-${{ matrix.other_os }}
           path: other-upgrade-target
-      - name: Download and checksum the current public release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          python3 - <<'PYTHON'
-          import hashlib,json,os,pathlib,re,subprocess
-          repo=os.environ['GITHUB_REPOSITORY']
-          tag=json.loads(subprocess.check_output(['gh','release','view','--repo',repo,'--json','tagName'],text=True))['tagName']
-          assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag)
-          target=json.loads(pathlib.Path('package.json').read_text())['version']
-          assert tuple(map(int,tag[1:].split('.')))<tuple(map(int,target.split('.')))
-          names=[f'MatiQ-Companion-{tag[1:]}-mac-arm64.zip',f'MatiQ-Companion-{tag[1:]}-mac-arm64.pkg']
-          subprocess.run(['gh','release','download',tag,'--repo',repo,'--pattern',names[0],'--pattern',names[1],'--pattern','SHA256SUMS.txt','--dir','dist'],check=True)
-          lines=(pathlib.Path('dist')/'SHA256SUMS.txt').read_text().splitlines()
-          for name in names:
-              expected=[line.split()[0] for line in lines if line.split()[-1]==name]
-              assert len(expected)==1 and hashlib.sha256((pathlib.Path('dist')/name).read_bytes()).hexdigest()==expected[0]
-          with open(os.environ['GITHUB_ENV'],'a') as env: env.write(f'COMPANION_UPGRADE_BASE_VERSION={tag[1:]}\nCOMPANION_UPGRADE_TARGET_VERSION={target}\n')
-          PYTHON
       - name: Upgrade the public installed version to these exact candidate bytes
+        if: steps.previous.outputs.has_previous == '1'
         timeout-minutes: 8
         run: npm run test:upgrade
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
           COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
+      - name: Record the public version used by native Windows qualification
+        if: runner.os == 'Windows' && steps.previous.outputs.has_previous == '1'
+        run: node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('dist/upgrade-proof.json','utf8'));p.initialWindowsRelease=false;p.observedPublicTag=process.env.COMPANION_PREVIOUS_PUBLIC_TAG;fs.writeFileSync('dist/published-windows-proof.json',JSON.stringify(p,null,2)+'\n');"
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: published-upgrade-diagnostics
+          name: published-upgrade-diagnostics-${{ runner.os }}-${{ runner.arch }}
           include-hidden-files: true
           retention-days: 3
           path: .validation/upgrade-diagnostic.json
       - uses: actions/upload-artifact@v4
         with:
-          name: published-mac-upgrade-proof
+          name: published-upgrade-proof-${{ matrix.os }}
           retention-days: 7
-          path: dist/upgrade-proof.json
+          path: ${{ runner.os == 'Windows' && 'dist/published-windows-proof.json' || 'dist/upgrade-proof.json' }}
           if-no-files-found: error
   draft:
     if: github.event_name == 'push'
@@ -359,13 +362,8 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: signed-*
-          merge-multiple: true
-          path: assets
       - name: Create a draft for native upgrade qualification
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" assets/* --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Signed build awaiting native two-version upgrade qualification. Publish only after completing docs/RELEASES.md."
+        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Native signed qualification completed. Populate this empty draft through Publish verified desktop installers; do not merge architecture artifact folders or publish unverified assets."

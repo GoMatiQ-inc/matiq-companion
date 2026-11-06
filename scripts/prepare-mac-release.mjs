@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import yaml from 'js-yaml';
-import {verifyUpdateAssets,macUpdateFeed} from './verify-update-assets.mjs';
+import {verifyUpdateAssets,desktopUpdateFeed} from './verify-update-assets.mjs';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function prepareMacRelease(input, output, version) {
   assert.match(version,/^\d+\.\d+\.\d+$/);
@@ -47,7 +47,7 @@ export async function prepareMacRelease(input, output, version) {
       for(const key of ['project','settings','modelSha256','generatedFile']) assert.equal(previous.retained[key],true);
     }
   }
-  const feed=Buffer.from(macUpdateFeed(metadata[0],metadata[1]));
+  const feed=Buffer.from(desktopUpdateFeed(metadata[0],metadata[1],'darwin'));
   const previous=JSON.parse(await fs.readFile(path.join(input,'published-upgrade-proof.json'),'utf8'));
   assert.equal(previous.updateFeedSha256,digest(feed),'Publish the same combined feed qualified by the previous public app.');
   published.set('latest-mac.yml',feed);

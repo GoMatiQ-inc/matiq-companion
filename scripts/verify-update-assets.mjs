@@ -43,11 +43,13 @@ export async function verifyUpdateAssets(directory, version, platform, arch = pl
   return [name, metadataName];
 }
 
-export function macUpdateFeed(arm, intel) {
-  assert.equal(arm.version,intel.version,"Both Mac update entries must have the same version.");
+export function desktopUpdateFeed(arm, intel, platform) {
+  assert.ok(["darwin","win32"].includes(platform),"Choose a qualified desktop platform.");
+  const suffix=platform==="darwin"?"mac":"windows",extension=platform==="darwin"?"zip":"exe";
+  assert.equal(arm.version,intel.version,"Both desktop update entries must have the same version.");
   for(const [metadata,arch] of [[arm,'arm64'],[intel,'x64']]) {
     assert.equal(metadata.files?.length,1,"Use exactly one verified update per architecture.");
-    assert.equal(metadata.files[0].url,`MatiQ-Companion-${metadata.version}-mac-${arch}.zip`,"Keep native update architecture entries in their verified order.");
+    assert.equal(metadata.files[0].url,`MatiQ-Companion-${metadata.version}-${suffix}-${arch}.${extension}`,"Keep native update architecture entries in their verified order.");
   }
   return yaml.dump({...intel,files:[...arm.files,...intel.files]});
 }

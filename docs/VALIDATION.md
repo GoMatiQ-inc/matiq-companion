@@ -6,7 +6,7 @@ Updated November 6, 2026. Qualification applies to the exact source and artifact
 
 The candidate adds native Quartz and Windows SendInput adapters, Mac permission controls, and four native CI targets: Apple Silicon Mac, Intel Mac, Windows x64 and Windows ARM64. It has **not** been signed or published as a completed release.
 
-- All 25 unit tests pass, including file boundaries, revocation, document round trips, model integrity, updater state and publication checks.
+- All 27 unit tests pass, including file boundaries, revocation, document round trips, model integrity, updater state and publication checks.
 - [Run 42259539248](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42259539248) passes Windows x64 development and packaged cross-application computer use. Mac activation/input and Windows ARM first-run setup failed; those platforms remain unqualified for computer use.
 - [Run 42264981228](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42264981228) exposed a Mac fixture title/field-label collision and an accessory-window target mismatch. The corrected fixture uses a unique input label; native targeting uses Accessibility hit-testing with a regular-window fallback. These corrections still require exact-source native qualification.
 - Linux bounded Xvfb checks pass actual local inference, model-to-DOCX execution, Electron workflows, OCR and separate-process input. Linux is a development test environment, not a released desktop platform.
@@ -21,6 +21,10 @@ The candidate release pipeline requires independently signed builds and real roo
 Microsoft's live identity-validation list on November 6 shows **In Progress**. No new owner document request was confirmed. The historical certificate-profile API error does not establish that the identity request disappeared. Signing configuration alone is not issuance, and unsigned or self-signed installers cannot satisfy distribution gates.
 
 Development and release CI use Node 24, matching Electron 45.2.3's embedded Node 24.22.2 worker runtime. The earlier Node 22 standalone harness intermittently terminated inside model disposal. Run 42270732872 completed five unmapped and five default mapped Windows x64 lifetimes, so that comparison did not isolate mapping as the cause; production memory mapping remains unchanged. The worker fixture now uses the actual Electron executable, awaits the full tool response, then forces five model unload/reload cycles through the production IPC worker. Packaged qualification repeats it from the ASAR worker. Linux passed actual document creation, complete replies, all five reloads and independent worker cleanup; native exact-source results remain required.
+
+The worker now shares one initialization promise between concurrent hardware probing and chat; its real IPC fixture overlaps those requests and requires exactly one native initialization before the document response and five model reloads. Native computer actions restore Companion without taking focus from queued target input. GUI smoke isolates plain chat from the independent Office-tool journey and records visible failure evidence. Fixtures snapshot owned process descendants and listeners before shutdown, verify their absence afterwards and fail if child inspection is unavailable.
+
+Windows release preparation has unit coverage for malformed/wrong-architecture PE headers, altered installer bytes, inconsistent company publishers and attempts to omit a required prior-public-version upgrade proof. The signed pipeline combines platform architecture feeds and the publisher retains both platform feeds once Windows is public. These are implemented gates, **not** evidence of an issued Microsoft profile or a qualified signed Windows release.
 
 ## Reproduce the checks
 

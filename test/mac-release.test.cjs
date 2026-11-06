@@ -17,12 +17,12 @@ test('Mac publication combines qualified architectures and refuses altered insta
   await fs.writeFile(path.join(dir,'upgrade-proof.json'),JSON.stringify(proof));
   if(arch==='arm64')await fs.writeFile(path.join(input,'published-upgrade-proof.json'),JSON.stringify({...proof,baseVersion:'0.1.0',targetVersion:'0.1.1',targetZipSha256:assets[zip]}));
  }
- const {macUpdateFeed}=await import('../scripts/verify-update-assets.mjs');
+ const {desktopUpdateFeed}=await import('../scripts/verify-update-assets.mjs');
  const metadata=await Promise.all(['arm64','x64'].map(async arch=>yaml.load(await fs.readFile(path.join(input,arch,'latest-mac.yml'),'utf8'))));
  const previousFile=path.join(input,'published-upgrade-proof.json'),previous=JSON.parse(await fs.readFile(previousFile,'utf8'));
- previous.updateFeedSha256=createHash('sha256').update(macUpdateFeed(...metadata)).digest('hex');
+ previous.updateFeedSha256=createHash('sha256').update(desktopUpdateFeed(...metadata,'darwin')).digest('hex');
  await fs.writeFile(previousFile,JSON.stringify(previous));
- assert.throws(()=>macUpdateFeed(metadata[1],metadata[0]),/architecture/);
+ assert.throws(()=>desktopUpdateFeed(metadata[1],metadata[0],'darwin'),/architecture/);
  const output=path.join(root,'out');await prepareMacRelease(input,output,'0.1.1');
  const merged=yaml.load(await fs.readFile(path.join(output,'latest-mac.yml'),'utf8'));assert.equal(merged.files.length,2);assert.match(merged.files[0].url,/arm64/);assert.match(merged.files[1].url,/x64/);
  await fs.writeFile(previousFile,JSON.stringify({...previous,updateFeedSha256:'0'.repeat(64)}));

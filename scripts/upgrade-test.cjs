@@ -166,15 +166,15 @@ async function bundleVersion(apps) {
   await fs.copyFile(source.location(MODELS[0]), model);
   const targetDirectory = path.join(root, "upgrade-target"),
     metadataName = windows ? "latest.yml" : "latest-mac.yml";
-  if(!windows) {
-    const {verifyUpdateAssets,macUpdateFeed}=await import('./verify-update-assets.mjs');
+  {
+    const {verifyUpdateAssets,desktopUpdateFeed}=await import('./verify-update-assets.mjs');
     const yaml=require('js-yaml'),otherDirectory=path.join(root,'other-upgrade-target');
-    await verifyUpdateAssets(targetDirectory,targetVersion,'darwin',process.arch);
-    await verifyUpdateAssets(otherDirectory,targetVersion,'darwin',process.arch==='arm64'?'x64':'arm64');
+    await verifyUpdateAssets(targetDirectory,targetVersion,process.platform,process.arch);
+    await verifyUpdateAssets(otherDirectory,targetVersion,process.platform,process.arch==='arm64'?'x64':'arm64');
     const native=yaml.load(await fs.readFile(path.join(targetDirectory,metadataName),'utf8'));
     const other=yaml.load(await fs.readFile(path.join(otherDirectory,metadataName),'utf8'));
     const entries=process.arch==='arm64'?[native,other]:[other,native];
-    await fs.writeFile(path.join(targetDirectory,metadataName),macUpdateFeed(...entries));
+    await fs.writeFile(path.join(targetDirectory,metadataName),desktopUpdateFeed(...entries,process.platform));
   }
   const allowed = new Set([
     metadataName,
@@ -365,7 +365,8 @@ async function bundleVersion(apps) {
       await fs.realpath(applicationInfo(launch.pid).bundle),
       await fs.realpath(windows ? apps : path.join(apps, "MatiQ Companion.app")),
     );
-    if(!windows) {
+    if(windows) await require('./verify-pe-architecture.cjs').verifyPEArchitecture(executable,process.arch);
+    else {
       const nativeArch=execFileSync("/usr/bin/lipo",["-archs",executable],{encoding:"utf8",timeout:15000}).trim();
       assert.equal(nativeArch,process.arch==='x64'?'x86_64':'arm64',"The update must select the native architecture, without Rosetta masking a wrong feed entry.");
     }
@@ -380,6 +381,7 @@ async function bundleVersion(apps) {
     const proof = {
       platform: process.platform,
       installation:systemInstall?"system-pkg":windows?"per-user-nsis":"user-owned-zip",
+      nativeArchitectureVerified:true,
       arch: process.arch,
       baseVersion,
       targetVersion,

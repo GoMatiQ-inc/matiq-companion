@@ -15,7 +15,7 @@ const { readWord } = require("../src/documents.cjs");
   const store = new ModelStore(process.env.COMPANION_VALIDATION_MODELS);
   assert.ok(await store.verify(MODELS[0]));
   const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-tools-")));
-  let child, owned, runtime, diagnostics = "", phase="document tool", stage="starting-worker", chunks=0;
+  let child, owned, runtime, diagnostics = "", phase="document tool", stage="starting-worker", chunks=0, runtimeInitializations=0;
   const watchdog = setTimeout(() => { process.exitCode=1;child?.kill("SIGKILL"); },300000);
   try {
     const projects = new Projects(path.join(dir, "projects"));
@@ -35,7 +35,7 @@ const { readWord } = require("../src/documents.cjs");
     child=fork(bootstrap,[],{execPath:executable,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','ignore','pipe','ipc']});
     owned=lifecycle.capture(child);
     child.stderr.on('data',bytes=>{diagnostics=(diagnostics+bytes).slice(-3000);});
-    child.on('message',message=>{if(message.type==='fixture-runtime'){runtime=message;console.log('Actual worker runtime:',JSON.stringify(runtime));}if(message.type==='stage'){stage=message.stage;console.log('Worker stage:',phase,stage);}if(message.type==='chunk')chunks++;});
+    child.on('message',message=>{if(message.type==='fixture-runtime'){runtime=message;console.log('Actual worker runtime:',JSON.stringify(runtime));}if(message.type==='stage'){stage=message.stage;if(stage==='initializing-runtime')runtimeInitializations++;console.log('Worker stage:',phase,stage);}if(message.type==='chunk')chunks++;});
     const prompt=message=>new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>finish(Error('Worker prompt timed out: '+JSON.stringify({phase,stage,chunks,runtime,diagnostics}))),150000);
       const finish=(error,value)=>{
@@ -57,6 +57,7 @@ const { readWord } = require("../src/documents.cjs");
       child.on('error',onError);child.on('exit',onExit);child.on('message',onMessage);
       child.send({type:'prompt',history:[],...message});
     });
+    child.send({type:'probe'});
     await prompt({
       modelPath:store.location(MODELS[0]),
       tools:tools.definitions(project).filter(t=>t.name==='create_word'),
@@ -72,19 +73,21 @@ const { readWord } = require("../src/documents.cjs");
       const text=await prompt({modelPath:iteration%2===0?alternate:store.location(MODELS[0]),tools:[],system:'Answer briefly. /no_think',text:'Reply with the word Hello.'});
       assert.ok(text.trim(),'The reloaded worker must return actual model output.');
     }
+    assert.equal(runtimeInitializations,1,'Concurrent hardware probing and chat must share one native runtime initialization.');
     assert.equal(runtime?.electron,require('electron/package.json').version,'Use the exact Electron runtime shipped with Companion.');
     assert.equal(Number(runtime.node.split('.')[0]),24,'Qualify the embedded Node major used by the app.');
     await fs.mkdir('.validation',{recursive:true});
-    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,completedModelReloads:5,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
+    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,completedModelReloads:5,runtimeInitializations,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
     console.log('PASS: actual Electron worker completed document tool, full responses and five native model unload/reload cycles.');
   } finally {
+    const tree=lifecycle.captureTree(owned);
     if(child && child.exitCode===null && child.signalCode===null){
       const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();
       let timer;
       try {await Promise.race([exited,new Promise((_,reject)=>{timer=setTimeout(()=>{child.kill('SIGKILL');reject(Error('Inference child did not exit.'));},5000);})]);}
       finally {clearTimeout(timer);}
     }
-    await lifecycle.verifyStopped(owned);
+    for(const process of tree)await lifecycle.verifyStopped(process);
     clearTimeout(watchdog);await fs.rm(dir,{recursive:true,force:true});
   }
 })().catch(error=>{console.error(error);process.exitCode=1;});

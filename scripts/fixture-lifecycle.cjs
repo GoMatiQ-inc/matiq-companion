@@ -2,7 +2,7 @@ const { execFileSync } = require("node:child_process");
 const assert = require("node:assert/strict");
 function listeners() {
   if (process.platform === "win32") {
-    return execFileSync("netstat", ["-ano", "-p", "tcp"], { encoding: "utf8" })
+    return execFileSync("netstat", ["-ano", "-p", "tcp"], { encoding: "utf8", timeout: 15000 })
       .split(/\r?\n/)
       .flatMap((line) => {
         const parts = line.trim().split(/\s+/);
@@ -15,7 +15,7 @@ function listeners() {
     let text;
     try {
       text = execFileSync("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN", "-Fpn"], {
-        encoding: "utf8",
+        encoding: "utf8", timeout: 15000,
       });
     } catch (error) {
       if (error.status === 1 && !error.stdout?.length) return [];
@@ -30,7 +30,7 @@ function listeners() {
     }
     return result;
   }
-  return execFileSync("ss", ["-H", "-ltnp"], { encoding: "utf8" })
+  return execFileSync("ss", ["-H", "-ltnp"], { encoding: "utf8", timeout: 15000 })
     .split("\n")
     .flatMap((line) => {
       const match = /pid=(\d+),/.exec(line);
@@ -52,6 +52,18 @@ function capture(child) {
       .map((row) => row.port),
   };
 }
+function captureTree(owned) {
+  if(!owned)return [];
+  try {
+  const rows=process.platform==='win32'
+    ? JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop';@{rows=@(Get-CimInstance Win32_Process | ForEach-Object {@{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId}})} | ConvertTo-Json -Depth 3 -Compress"],{encoding:'utf8',timeout:15000})).rows
+    : execFileSync('/bin/ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:15000}).split('\n').flatMap(line=>{const m=/^\s*(\d+)\s+(\d+)\s*$/.exec(line);return m?[{pid:Number(m[1]),parent:Number(m[2])}]:[];});
+  const pids=new Set([owned.pid]);let changed=true;
+  while(changed){changed=false;for(const row of rows)if(pids.has(row.parent)&&!pids.has(row.pid)){pids.add(row.pid);changed=true;}}
+  const ports=listeners();
+  return [...pids].map(pid=>({pid,ports:[...new Set([...(pid===owned.pid?owned.ports:[]),...ports.filter(row=>row.pid===pid).map(row=>row.port)])]}));
+  } catch(error){return [{...owned,inspectionError:error}];}
+}
 async function verifyStopped(owned) {
   if (!owned) return;
   let alive = true;
@@ -68,7 +80,7 @@ async function verifyStopped(owned) {
   assert.equal(
     alive,
     false,
-    "Owned desktop process is still alive; inspect it before continuing.",
+    `Owned process ${owned.pid} is still alive; inspect its shutdown before continuing.`,
   );
   const remaining = listeners().filter(
     (row) => row.pid === owned.pid || owned.ports.includes(row.port),
@@ -78,8 +90,9 @@ async function verifyStopped(owned) {
     0,
     "A captured fixture listener remains occupied; inspect ownership, never stop unrelated processes.",
   );
+  if(owned.inspectionError)throw Error('Could not inspect owned child processes. Inspect the native process-table failure before claiming cleanup.',{cause:owned.inspectionError});
   console.log(
     `PASS: owned desktop process exited and ${owned.ports.length} captured listeners are absent.`,
   );
 }
-module.exports = { capture, verifyStopped };
+module.exports = { capture, captureTree, verifyStopped };
