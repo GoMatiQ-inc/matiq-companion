@@ -1,4 +1,4 @@
-const { desktopCapturer, screen } = require("electron");
+const { app, desktopCapturer, screen } = require("electron");
 const { createWorker } = require("tesseract.js");
 const language = require("@tesseract.js-data/eng");
 const { computerAccess } = require("./computer-access.cjs");
@@ -8,9 +8,9 @@ function createComputer(window) {
     if (signal?.aborted) throw Error("Task stopped.");
     const access = computerAccess();
     if (process.platform === "darwin" && name === "observe_screen" && access.screen !== "granted")
-      throw Error("Enable Screen Recording in Settings → Computer access, approve MatiQ Companion in macOS and restart the app before observing.");
+      throw Error(`Enable Screen Recording in Settings → Computer access, approve ${app.getName()} in macOS and restart the app before observing.`);
     if (process.platform === "darwin" && name !== "observe_screen" && access.input !== "granted")
-      throw Error("Enable Accessibility for MatiQ Companion in Settings → Computer access before controlling other apps.");
+      throw Error(`Enable Accessibility for ${app.getName()} in Settings → Computer access before controlling other apps.`);
     if(process.platform === "darwin" && ["type_text","press_key"].includes(name)) {
       if(!observation || Date.now()-observation.time>30000 || observation.display!==screen.getPrimaryDisplay().id) throw Error("Observe the screen again before computer actions; the last observation is missing or stale.");
       await require("./mac-computer.cjs").activateTarget(macTarget,signal);
