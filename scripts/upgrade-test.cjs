@@ -253,7 +253,7 @@ async function bundleVersion(apps) {
   try {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     port = server.address().port;
-    if(systemInstall){authorizationFixture=require('./ci-mac-authorization.cjs').createAuthorizationFixture();authorizationFixture.prepare();}
+    if(systemInstall)authorizationFixture=require('./ci-mac-authorization.cjs').createAuthorizationFixture();
     app = await electron.launch({
       executablePath: executable,
       args: [],

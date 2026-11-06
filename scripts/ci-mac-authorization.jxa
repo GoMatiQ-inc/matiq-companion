@@ -22,12 +22,15 @@ try {
     step='type-user';events.keystroke('a',{using:['command down']});events.keystroke(config.name);
     $.NSThread.sleepForTimeInterval(0.2);
     if(fields[0].value()!==config.name)throw Error('The fixture identity was not entered.');
+    step='commit-user';events.keyCode(48);$.NSThread.sleepForTimeInterval(1.2);
     step='focus-password';fields[1].attributes.byName('AXFocused').value=true;$.NSThread.sleepForTimeInterval(0.2);
     if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('The owned password field is not focused.');
     step='type-password';events.keystroke('a',{using:['command down']});events.keystroke(config.password);
     $.NSThread.sleepForTimeInterval(0.3);
     if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('Authorization lost field focus before submission.');
-    step='submit';const passwordLength=String(fields[1].value()||'').length;events.keyCode(36);result={authorizationSubmitted:true,passwordLength};
+    step='verify-password';if(fields[1].value()!==config.password)throw Error('The native field did not receive the exact generated credential.');
+    step='commit-password';events.keyCode(48);$.NSThread.sleepForTimeInterval(0.3);
+    step='submit';events.keyCode(36);result={authorizationSubmitted:true,passwordLength:config.password.length};
   }
 } catch(error) {result={error:step,number:Number(error.errorNumber||error.number)||null};}
 JSON.stringify(result);
