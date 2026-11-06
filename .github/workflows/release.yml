@@ -39,6 +39,12 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Reuse portable model weights; inference re-verifies their hash
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/companion-models
+          key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
+          enableCrossOsArchive: true
       - run: npm ci --no-audit --no-fund
       - run: npm test
       - run: npm run test:inference

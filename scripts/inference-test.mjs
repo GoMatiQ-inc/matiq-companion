@@ -8,7 +8,14 @@ if (!dir)
   throw Error("Set COMPANION_VALIDATION_MODELS to a task-owned model folder.");
 const store = new ModelStore(dir),
   m = MODELS[0];
-await store.download(m, AbortSignal.timeout(120000), () => {});
+try {
+  await store.download(m, AbortSignal.timeout(300000), () => {});
+} catch (error) {
+  throw new Error(
+    "Verified model setup failed. Inspect the network/checksum cause and retry the failed job; do not skip verification.",
+    { cause: error },
+  );
+}
 // Hosted Windows runners have no supported GPU; the packaged workflow still exercises automatic hardware selection.
 const llama = await getLlama({
   build: "never",
