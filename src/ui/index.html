@@ -1,5 +1,56 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"><title>MatiQ Companion</title><link rel="stylesheet" href="style.css"></head><body>
-<aside class="sidebar"><div class="brand"><img src="assets/matiq-solutions-wordmark-dark.png" alt="MatiQ Solutions"><span>Companion</span></div><nav id="nav"></nav><div class="sidebar-bottom"><button id="settings-nav">Settings</button><strong>On your device</strong><span id="local-state">Local inference</span><button id="setup-nav" class="subtle">Choose a model</button></div></aside>
-<div class="workspace"><header><strong id="page-title">Chat</strong><span id="privacy" class="badge">Local processing</span></header><main><div id="error" class="error" role="alert" hidden></div><div id="content"></div></main><footer><span>By MatiQ Solutions</span><span>Local models. Your projects. Tools you control.</span></footer></div>
-<dialog id="approval"><form method="dialog"><h2 id="approval-title">Review this action</h2><p id="approval-warning"></p><pre id="approval-preview"></pre><div class="actions"><button id="deny" type="button">Deny</button><button id="allow" type="button" class="primary">Allow once</button></div></form></dialog>
-<script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <title>MatiQ Companion</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <img
+          src="assets/matiq-solutions-wordmark-dark.png"
+          alt="MatiQ Solutions"
+        /><span>Companion</span>
+      </div>
+      <nav id="nav"></nav>
+      <div class="sidebar-bottom">
+        <button id="settings-nav">Settings</button
+        ><strong>On your device</strong
+        ><span id="local-state">Local inference</span
+        ><button id="setup-nav" class="subtle">Choose a model</button>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header>
+        <strong id="page-title">Chat</strong
+        ><span id="privacy" class="badge">Local processing</span>
+      </header>
+      <main>
+        <div id="error" class="error" role="alert" hidden></div>
+        <div id="content"></div>
+      </main>
+      <footer>
+        <span>By MatiQ Solutions</span
+        ><span>Local models. Your projects. Tools you control.</span>
+      </footer>
+    </div>
+    <dialog id="approval">
+      <form method="dialog">
+        <h2 id="approval-title">Review this action</h2>
+        <p id="approval-warning"></p>
+        <pre id="approval-preview"></pre>
+        <div class="actions">
+          <button id="deny" type="button">Deny</button
+          ><button id="allow" type="button" class="primary">Allow once</button>
+        </div>
+      </form>
+    </dialog>
+    <script src="app.js"></script>
+  </body>
+</html>

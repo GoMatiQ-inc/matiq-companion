@@ -1,16 +1,153 @@
-const fs=require('node:fs/promises');
-const {Document,Packer,Paragraph,HeadingLevel}=require('docx');
-const ExcelJS=require('exceljs');
-const Zip=require('adm-zip');
-const {DOMParser,XMLSerializer}=require('@xmldom/xmldom');
-const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
-function text(v,max=200000){if(typeof v!=='string'||v.length>max)throw Error(`Provide text up to ${max} characters.`);return v;}
-function wordXML(buffer){if(buffer.length>25*1024**2)throw Error('Word files must be under 25 MiB.');const zip=new Zip(buffer);let bytes=0;for(const e of zip.getEntries()){bytes+=e.header.size;if(bytes>50*1024**2)throw Error('Expanded document exceeds 50 MiB.');}const raw=zip.readAsText('word/document.xml');if(!raw||/<!DOCTYPE/i.test(raw))throw Error('Choose a standard, unencrypted .docx file.');const doc=new DOMParser({onError:(level,msg)=>{throw Error('Cannot parse this Word document: '+msg);}}).parseFromString(raw,'text/xml');return {zip,doc,paragraphs:Array.from(doc.getElementsByTagNameNS(W,'p'))};}
-async function createWord(title,paragraphs){if(!Array.isArray(paragraphs)||paragraphs.length>1000)throw Error('Provide at most 1000 paragraphs.');const doc=new Document({sections:[{children:[new Paragraph({text:text(title,500),heading:HeadingLevel.TITLE}),...paragraphs.map(v=>new Paragraph(text(v)))]}]});return Packer.toBuffer(doc);}
-function readWord(buffer){const {paragraphs}=wordXML(buffer);return paragraphs.map((p,index)=>({index,text:Array.from(p.getElementsByTagNameNS(W,'t')).map(t=>t.textContent).join('')}));}
-function replaceWord(buffer,index,value){const {zip,doc,paragraphs}=wordXML(buffer);if(!Number.isInteger(index)||!paragraphs[index])throw Error('Read the document and choose an existing paragraph index.');const p=paragraphs[index];for(const n of Array.from(p.childNodes)){if(n.localName!=='pPr')p.removeChild(n);}const run=doc.createElementNS(W,'w:r'),t=doc.createElementNS(W,'w:t');t.setAttribute('xml:space','preserve');t.appendChild(doc.createTextNode(text(value)));run.appendChild(t);p.appendChild(run);zip.updateFile('word/document.xml',Buffer.from(new XMLSerializer().serializeToString(doc)));return zip.toBuffer();}
-async function workbook(buffer){if(buffer?.length>25*1024**2)throw Error('Workbooks must be under 25 MiB.');if(buffer){const zip=new Zip(buffer);let bytes=0;for(const e of zip.getEntries()){bytes+=e.header.size;if(bytes>50*1024**2)throw Error('Expanded workbook exceeds 50 MiB.');}}const book=new ExcelJS.Workbook();if(buffer)await book.xlsx.load(buffer);return book;}
-async function readWorkbook(buffer){const b=await workbook(buffer);return b.worksheets.map(s=>({name:s.name,rows:s.getSheetValues().slice(1,201).map(r=>r?.slice(1,51))}));}
-async function createWorkbook(sheet,rows){if(!Array.isArray(rows)||rows.length>1000||rows.some(r=>!Array.isArray(r)||r.length>100))throw Error('Use at most 1000 rows and 100 columns.');const b=await workbook();const s=b.addWorksheet(text(sheet,31));for(const row of rows){if(row.some(v=>!['string','number','boolean'].includes(typeof v)&&v!==null))throw Error('Cells must contain plain text, numbers, booleans or null.');s.addRow(row);}return Buffer.from(await b.xlsx.writeBuffer());}
-async function setCells(buffer,sheet,cells){const b=await workbook(buffer);const s=b.getWorksheet(sheet);if(!s)throw Error('Read the workbook and choose an existing sheet.');if(!Array.isArray(cells)||cells.length>500)throw Error('Update at most 500 cells per action.');for(const c of cells){if(!/^[A-Z]{1,3}[1-9][0-9]{0,5}$/.test(c.address)||!['string','number','boolean'].includes(typeof c.value))throw Error('Use A1-style addresses and plain cell values.');s.getCell(c.address).value=c.value;}return Buffer.from(await b.xlsx.writeBuffer());}
-module.exports={createWord,readWord,replaceWord,createWorkbook,readWorkbook,setCells};
+const fs = require("node:fs/promises");
+const { Document, Packer, Paragraph, HeadingLevel } = require("docx");
+const ExcelJS = require("exceljs");
+const Zip = require("adm-zip");
+const { DOMParser, XMLSerializer } = require("@xmldom/xmldom");
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+function text(v, max = 200000) {
+  if (typeof v !== "string" || v.length > max)
+    throw Error(`Provide text up to ${max} characters.`);
+  return v;
+}
+function wordXML(buffer) {
+  if (buffer.length > 25 * 1024 ** 2)
+    throw Error("Word files must be under 25 MiB.");
+  const zip = new Zip(buffer);
+  let bytes = 0;
+  for (const e of zip.getEntries()) {
+    bytes += e.header.size;
+    if (bytes > 50 * 1024 ** 2)
+      throw Error("Expanded document exceeds 50 MiB.");
+  }
+  const raw = zip.readAsText("word/document.xml");
+  if (!raw || /<!DOCTYPE/i.test(raw))
+    throw Error("Choose a standard, unencrypted .docx file.");
+  const doc = new DOMParser({
+    onError: (level, msg) => {
+      throw Error("Cannot parse this Word document: " + msg);
+    },
+  }).parseFromString(raw, "text/xml");
+  return {
+    zip,
+    doc,
+    paragraphs: Array.from(doc.getElementsByTagNameNS(W, "p")),
+  };
+}
+async function createWord(title, paragraphs) {
+  if (!Array.isArray(paragraphs) || paragraphs.length > 1000)
+    throw Error("Provide at most 1000 paragraphs.");
+  const doc = new Document({
+    sections: [
+      {
+        children: [
+          new Paragraph({
+            text: text(title, 500),
+            heading: HeadingLevel.TITLE,
+          }),
+          ...paragraphs.map((v) => new Paragraph(text(v))),
+        ],
+      },
+    ],
+  });
+  return Packer.toBuffer(doc);
+}
+function readWord(buffer) {
+  const { paragraphs } = wordXML(buffer);
+  return paragraphs.map((p, index) => ({
+    index,
+    text: Array.from(p.getElementsByTagNameNS(W, "t"))
+      .map((t) => t.textContent)
+      .join(""),
+  }));
+}
+function replaceWord(buffer, index, value) {
+  const { zip, doc, paragraphs } = wordXML(buffer);
+  if (!Number.isInteger(index) || !paragraphs[index])
+    throw Error("Read the document and choose an existing paragraph index.");
+  const p = paragraphs[index];
+  for (const n of Array.from(p.childNodes)) {
+    if (n.localName !== "pPr") p.removeChild(n);
+  }
+  const run = doc.createElementNS(W, "w:r"),
+    t = doc.createElementNS(W, "w:t");
+  t.setAttribute("xml:space", "preserve");
+  t.appendChild(doc.createTextNode(text(value)));
+  run.appendChild(t);
+  p.appendChild(run);
+  zip.updateFile(
+    "word/document.xml",
+    Buffer.from(new XMLSerializer().serializeToString(doc)),
+  );
+  return zip.toBuffer();
+}
+async function workbook(buffer) {
+  if (buffer?.length > 25 * 1024 ** 2)
+    throw Error("Workbooks must be under 25 MiB.");
+  if (buffer) {
+    const zip = new Zip(buffer);
+    let bytes = 0;
+    for (const e of zip.getEntries()) {
+      bytes += e.header.size;
+      if (bytes > 50 * 1024 ** 2)
+        throw Error("Expanded workbook exceeds 50 MiB.");
+    }
+  }
+  const book = new ExcelJS.Workbook();
+  if (buffer) await book.xlsx.load(buffer);
+  return book;
+}
+async function readWorkbook(buffer) {
+  const b = await workbook(buffer);
+  return b.worksheets.map((s) => ({
+    name: s.name,
+    rows: s
+      .getSheetValues()
+      .slice(1, 201)
+      .map((r) => r?.slice(1, 51)),
+  }));
+}
+async function createWorkbook(sheet, rows) {
+  if (
+    !Array.isArray(rows) ||
+    rows.length > 1000 ||
+    rows.some((r) => !Array.isArray(r) || r.length > 100)
+  )
+    throw Error("Use at most 1000 rows and 100 columns.");
+  const b = await workbook();
+  const s = b.addWorksheet(text(sheet, 31));
+  for (const row of rows) {
+    if (
+      row.some(
+        (v) =>
+          !["string", "number", "boolean"].includes(typeof v) && v !== null,
+      )
+    )
+      throw Error("Cells must contain plain text, numbers, booleans or null.");
+    s.addRow(row);
+  }
+  return Buffer.from(await b.xlsx.writeBuffer());
+}
+async function setCells(buffer, sheet, cells) {
+  const b = await workbook(buffer);
+  const s = b.getWorksheet(sheet);
+  if (!s) throw Error("Read the workbook and choose an existing sheet.");
+  if (!Array.isArray(cells) || cells.length > 500)
+    throw Error("Update at most 500 cells per action.");
+  for (const c of cells) {
+    if (
+      !/^[A-Z]{1,3}[1-9][0-9]{0,5}$/.test(c.address) ||
+      !["string", "number", "boolean"].includes(typeof c.value)
+    )
+      throw Error("Use A1-style addresses and plain cell values.");
+    s.getCell(c.address).value = c.value;
+  }
+  return Buffer.from(await b.xlsx.writeBuffer());
+}
+module.exports = {
+  createWord,
+  readWord,
+  replaceWord,
+  createWorkbook,
+  readWorkbook,
+  setCells,
+};

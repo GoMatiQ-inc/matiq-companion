@@ -1,3 +1,63 @@
-const test=require('node:test');const assert=require('node:assert/strict');const fs=require('node:fs/promises');const os=require('node:os');const path=require('node:path');const {createHash}=require('node:crypto');const {ModelStore,sharedRoot}=require('../src/models.cjs');const {recommend}=require('../src/hardware.cjs');const {MODELS}=require('../src/catalog.cjs');
-test('verified downloads deduplicate by artifact kind/hash and corrupt downloads never become ready',async t=>{const dir=await fs.mkdtemp(path.join(os.tmpdir(),'companion-model-'));t.after(()=>fs.rm(dir,{recursive:true,force:true}));const body=Buffer.from('test artifact');const m={id:'test',kind:'llm',format:'gguf',file:'model.gguf',bytes:body.length,sha256:createHash('sha256').update(body).digest('hex'),url:'https://example.invalid/model',license:'test'};const store=new ModelStore(dir);const before=global.fetch;t.after(()=>{global.fetch=before});let fetches=0;global.fetch=async()=>{fetches++;return new Response(body)};await store.download(m,new AbortController().signal);await store.download(m,new AbortController().signal);assert.equal(fetches,1);assert.equal(await store.verify(m),true);assert.equal((await store.inventory())[0].kind,'llm');const corrupt={...m,sha256:'0'.repeat(64)};await assert.rejects(store.download(corrupt,new AbortController().signal),/checksum/);assert.equal(await store.verify(corrupt),false);await assert.rejects(fs.stat(store.location(corrupt)+'.partial'),{code:'ENOENT'});assert.notEqual(store.location(m),store.location({...m,kind:'asr'}));});
-test('hardware recommendation never treats an unsupported memory budget as suitable',()=>{assert.equal(recommend({memoryBytes:2*1024**3},MODELS),null);assert.equal(recommend({memoryBytes:8*1024**3},MODELS),'qwen3-1.7b');assert.equal(sharedRoot('darwin','/Users/test',{}),path.join('/Users/test','Library','Application Support','MatiQ','Models'));});
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const fs = require("node:fs/promises");
+const os = require("node:os");
+const path = require("node:path");
+const { createHash } = require("node:crypto");
+const { ModelStore, sharedRoot } = require("../src/models.cjs");
+const { recommend } = require("../src/hardware.cjs");
+const { MODELS } = require("../src/catalog.cjs");
+test("verified downloads deduplicate by artifact kind/hash and corrupt downloads never become ready", async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "companion-model-"));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const body = Buffer.from("test artifact");
+  const m = {
+    id: "test",
+    kind: "llm",
+    format: "gguf",
+    file: "model.gguf",
+    bytes: body.length,
+    sha256: createHash("sha256").update(body).digest("hex"),
+    url: "https://example.invalid/model",
+    license: "test",
+  };
+  const store = new ModelStore(dir);
+  const before = global.fetch;
+  t.after(() => {
+    global.fetch = before;
+  });
+  let fetches = 0;
+  global.fetch = async () => {
+    fetches++;
+    return new Response(body);
+  };
+  await store.download(m, new AbortController().signal);
+  await store.download(m, new AbortController().signal);
+  assert.equal(fetches, 1);
+  assert.equal(await store.verify(m), true);
+  assert.equal((await store.inventory())[0].kind, "llm");
+  const corrupt = { ...m, sha256: "0".repeat(64) };
+  await assert.rejects(
+    store.download(corrupt, new AbortController().signal),
+    /checksum/,
+  );
+  assert.equal(await store.verify(corrupt), false);
+  await assert.rejects(fs.stat(store.location(corrupt) + ".partial"), {
+    code: "ENOENT",
+  });
+  assert.notEqual(store.location(m), store.location({ ...m, kind: "asr" }));
+});
+test("hardware recommendation never treats an unsupported memory budget as suitable", () => {
+  assert.equal(recommend({ memoryBytes: 2 * 1024 ** 3 }, MODELS), null);
+  assert.equal(recommend({ memoryBytes: 8 * 1024 ** 3 }, MODELS), "qwen3-1.7b");
+  assert.equal(
+    sharedRoot("darwin", "/Users/test", {}),
+    path.join(
+      "/Users/test",
+      "Library",
+      "Application Support",
+      "MatiQ",
+      "Models",
+    ),
+  );
+});

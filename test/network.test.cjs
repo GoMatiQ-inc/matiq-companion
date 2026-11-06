@@ -1,2 +1,46 @@
-const test=require('node:test');const assert=require('node:assert/strict');const https=require('node:https');const dns=require('node:dns').promises;const {EventEmitter}=require('node:events');const {page}=require('../src/network.cjs');
-test('pinned HTTPS lookup supports Node all-address requests and redirects reject private DNS',async t=>{const lookup=dns.lookup,get=https.get;t.after(()=>{dns.lookup=lookup;https.get=get;});dns.lookup=async host=>[{address:host==='private.invalid'?'127.0.0.1':'93.184.216.34',family:4}];https.get=(url,options,callback)=>{options.lookup(url.hostname,{all:true},(e,addresses)=>{assert.equal(e,null);assert.deepEqual(addresses,[{address:'93.184.216.34',family:4}]);});options.lookup(url.hostname,{},(e,address,family)=>{assert.equal(address,'93.184.216.34');assert.equal(family,4);});const req=new EventEmitter();queueMicrotask(()=>{const res=new EventEmitter();res.statusCode=url.pathname==='/redirect'?302:200;res.headers={'content-type':'text/html',location:'https://private.invalid/'};res.resume=()=>{};callback(res);res.emit('data',Buffer.from('<p>Actual page</p>'));res.emit('end');});return req;};assert.equal(await page('https://public.invalid/'),'<p>Actual page</p>');await assert.rejects(page('https://public.invalid/redirect'),/private/);});
+const test = require("node:test");
+const assert = require("node:assert/strict");
+const https = require("node:https");
+const dns = require("node:dns").promises;
+const { EventEmitter } = require("node:events");
+const { page } = require("../src/network.cjs");
+test("pinned HTTPS lookup supports Node all-address requests and redirects reject private DNS", async (t) => {
+  const lookup = dns.lookup,
+    get = https.get;
+  t.after(() => {
+    dns.lookup = lookup;
+    https.get = get;
+  });
+  dns.lookup = async (host) => [
+    {
+      address: host === "private.invalid" ? "127.0.0.1" : "93.184.216.34",
+      family: 4,
+    },
+  ];
+  https.get = (url, options, callback) => {
+    options.lookup(url.hostname, { all: true }, (e, addresses) => {
+      assert.equal(e, null);
+      assert.deepEqual(addresses, [{ address: "93.184.216.34", family: 4 }]);
+    });
+    options.lookup(url.hostname, {}, (e, address, family) => {
+      assert.equal(address, "93.184.216.34");
+      assert.equal(family, 4);
+    });
+    const req = new EventEmitter();
+    queueMicrotask(() => {
+      const res = new EventEmitter();
+      res.statusCode = url.pathname === "/redirect" ? 302 : 200;
+      res.headers = {
+        "content-type": "text/html",
+        location: "https://private.invalid/",
+      };
+      res.resume = () => {};
+      callback(res);
+      res.emit("data", Buffer.from("<p>Actual page</p>"));
+      res.emit("end");
+    });
+    return req;
+  };
+  assert.equal(await page("https://public.invalid/"), "<p>Actual page</p>");
+  await assert.rejects(page("https://public.invalid/redirect"), /private/);
+});
