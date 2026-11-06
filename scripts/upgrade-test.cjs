@@ -238,6 +238,7 @@ async function bundleVersion(apps) {
     handle,
     owned,
     port,
+    authorizationFixture,
     successful = false;
   const watchdog = setTimeout(() => {
     for (const process of [...processesIn(ownedApplication), ...processesIn(shipIt)])
@@ -252,6 +253,7 @@ async function bundleVersion(apps) {
   try {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     port = server.address().port;
+    if(systemInstall)authorizationFixture=require('./ci-mac-authorization.cjs').createAuthorizationFixture();
     app = await electron.launch({
       executablePath: executable,
       args: [],
@@ -343,6 +345,7 @@ async function bundleVersion(apps) {
     await page
       .getByRole("button", { name: "Restart to update", exact: true })
       .click();
+    if(authorizationFixture)await authorizationFixture.authorize();
     const launch = await waitFor(async () => {
       if ((await bundleVersion(apps)) !== targetVersion) return false;
       const processInfo = processesIn(ownedApplication).find(
@@ -382,6 +385,7 @@ async function bundleVersion(apps) {
       platform: process.platform,
       installation:systemInstall?"system-pkg":windows?"per-user-nsis":"user-owned-zip",
       nativeArchitectureVerified:true,
+      nativeAdministratorAuthorization:Boolean(authorizationFixture),
       arch: process.arch,
       baseVersion,
       targetVersion,
@@ -414,6 +418,7 @@ async function bundleVersion(apps) {
         "; project, settings, model SHA256 and generated file preserved.",
     );
   } finally {
+    try {
     clearTimeout(watchdog);
     const diagnostic = {
       successful,
@@ -511,6 +516,7 @@ async function bundleVersion(apps) {
     if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });
     console.log("PASS: upgrade fixture process and loopback port cleanup.");
+    } finally {authorizationFixture?.close();}
   }
   assert.ok(successful, "The signed upgrade did not complete.");
 })().catch((error) => {

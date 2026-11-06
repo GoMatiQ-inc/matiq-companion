@@ -42,11 +42,11 @@ def password_command(args, password, timeout=45):
     pid, fd = pty.fork()
     if pid == 0:
         os.execv(args[0], args)
-    settings = termios.tcgetattr(fd)
-    settings[3] &= ~termios.ECHO
-    termios.tcsetattr(fd, termios.TCSANOW, settings)
     deadline, buffer, prompts, finished = time.monotonic() + timeout, b"", 0, False
     try:
+        settings = termios.tcgetattr(fd)
+        settings[3] &= ~termios.ECHO
+        termios.tcsetattr(fd, termios.TCSANOW, settings)
         while time.monotonic() < deadline:
             if select.select([fd], [], [], 0.1)[0]:
                 try:
