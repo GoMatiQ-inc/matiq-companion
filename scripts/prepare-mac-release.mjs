@@ -18,6 +18,7 @@ export async function prepareMacRelease(input, output, version) {
     assert.equal(proof.artifact,pkg);
     for(const key of ['signed','notarized','stapled']) assert.equal(proof[key],true);
     assert.equal(upgrade.installation,'system-pkg','Qualify the actual installed PKG upgrade path.');
+    assert.equal(upgrade.nativeAdministratorAuthorization,true,'Qualify native administrator authorization.');
     assert.equal(upgrade.arch,arch); assert.equal(upgrade.baseVersion,version);
     for(const key of ['signedDownloadRestart','automaticRelaunch']) assert.equal(upgrade[key],true);
     for(const key of ['project','settings','modelSha256','generatedFile']) assert.equal(upgrade.retained[key],true);
@@ -39,6 +40,7 @@ export async function prepareMacRelease(input, output, version) {
     if(arch==='arm64') {
       const previous=JSON.parse(await fs.readFile(path.join(input,'published-upgrade-proof.json'),'utf8'));
       assert.equal(previous.installation,'system-pkg');
+      assert.equal(previous.nativeAdministratorAuthorization,true,'Qualify previous-public native administrator authorization.');
       assert.equal(previous.targetVersion,version); assert.equal(previous.targetZipSha256,proof.assets[zip]);
       assert.match(previous.updateFeedSha256,/^[a-f0-9]{64}$/);
       assert.match(previous.baseVersion,/^\d+\.\d+\.\d+$/);

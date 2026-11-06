@@ -40,6 +40,7 @@ function processesIn(directory) {
       const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/.exec(line);
       if (!match) return [];
       let executable = match[3];
+      if (!executable.startsWith(directory + path.sep)) return [];
       try {
         executable = realpathSync(executable);
       } catch (error) {
@@ -238,6 +239,7 @@ async function bundleVersion(apps) {
     handle,
     owned,
     port,
+    authorizationFixture,
     successful = false;
   const watchdog = setTimeout(() => {
     for (const process of [...processesIn(ownedApplication), ...processesIn(shipIt)])
@@ -252,6 +254,7 @@ async function bundleVersion(apps) {
   try {
     await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
     port = server.address().port;
+    if(systemInstall)authorizationFixture=require('./ci-mac-authorization.cjs').createAuthorizationFixture();
     app = await electron.launch({
       executablePath: executable,
       args: [],
@@ -343,6 +346,7 @@ async function bundleVersion(apps) {
     await page
       .getByRole("button", { name: "Restart to update", exact: true })
       .click();
+    if(authorizationFixture)await authorizationFixture.authorize();
     const launch = await waitFor(async () => {
       if ((await bundleVersion(apps)) !== targetVersion) return false;
       const processInfo = processesIn(ownedApplication).find(
@@ -382,6 +386,7 @@ async function bundleVersion(apps) {
       platform: process.platform,
       installation:systemInstall?"system-pkg":windows?"per-user-nsis":"user-owned-zip",
       nativeArchitectureVerified:true,
+      nativeAdministratorAuthorization:Boolean(authorizationFixture),
       arch: process.arch,
       baseVersion,
       targetVersion,
@@ -414,6 +419,7 @@ async function bundleVersion(apps) {
         "; project, settings, model SHA256 and generated file preserved.",
     );
   } finally {
+    try {
     clearTimeout(watchdog);
     const diagnostic = {
       successful,
@@ -423,6 +429,23 @@ async function bundleVersion(apps) {
       processes: [...processesIn(ownedApplication), ...processesIn(shipIt)],
       logs: {},
     };
+    if(!successful && !windows) {
+      let captureTimer;
+      try {
+        const png=await Promise.race([
+          app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');}),
+          new Promise((_,reject)=>{captureTimer=setTimeout(()=>reject(Error('Native update desktop capture timed out.')),10000);})
+        ]);
+        await fs.mkdir(path.join(root,'.validation'),{recursive:true});
+        await fs.writeFile(path.join(root,'.validation','upgrade-desktop.png'),Buffer.from(png,'base64'));
+      } catch(error) {diagnostic.captureError=error.message;console.error('Upgrade capture diagnostic:',error.message);}
+      finally {clearTimeout(captureTimer);}
+      try {
+        diagnostic.nativeSystemLog=execFileSync('/usr/bin/log',['show','--last','4m','--style','compact','--predicate','process == "ShipIt" OR process == "SecurityAgent" OR process == "authd" OR subsystem BEGINSWITH "com.github.Squirrel"'],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024}).slice(-20000);
+        diagnostic.updaterJobs=execFileSync('/bin/launchctl',['list'],{encoding:'utf8',timeout:10000}).split('\n').filter(line=>/ShipIt|companion/i.test(line));
+        diagnostic.authorizationElements=execFileSync('/usr/bin/osascript',['-e','tell application "System Events" to tell process "SecurityAgent" to get entire contents of window 1'],{encoding:'utf8',timeout:10000,maxBuffer:128*1024}).slice(-10000);
+      } catch(error) {diagnostic.nativeLogError=error.message;console.error('Upgrade native-log diagnostic:',error.message);}
+    }
     for (const name of ["ShipIt_stderr.log", "ShipIt_stdout.log"]) {
       try {
         diagnostic.logs[name] = (
@@ -494,6 +517,7 @@ async function bundleVersion(apps) {
     if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });
     console.log("PASS: upgrade fixture process and loopback port cleanup.");
+    } finally {authorizationFixture?.close();}
   }
   assert.ok(successful, "The signed upgrade did not complete.");
 })().catch((error) => {

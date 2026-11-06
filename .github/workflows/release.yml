@@ -212,6 +212,7 @@ jobs:
           key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
           enableCrossOsArchive: true
       - run: npm ci --no-audit --no-fund
+      - run: npm run native:build
       - run: npm run test:inference
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
@@ -331,6 +332,8 @@ jobs:
           enableCrossOsArchive: true
       - run: npm ci --no-audit --no-fund
         if: steps.previous.outputs.has_previous == '1'
+      - run: npm run native:build
+        if: runner.os == 'macOS' && steps.previous.outputs.has_previous == '1'
       - run: npm run test:inference
         if: steps.previous.outputs.has_previous == '1'
         env:
