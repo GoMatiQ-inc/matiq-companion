@@ -14,7 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - { os: macos-latest, platform: darwin, arch: arm64 }
+          - { os: macos-15-intel, platform: darwin, arch: x64 }
+          - { os: windows-latest, platform: win32, arch: x64 }
+          - { os: windows-11-arm, platform: win32, arch: arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -25,6 +29,8 @@ jobs:
         with:
           node-version: '22'
           cache: npm
+      - name: Verify the native platform and architecture
+        run: node -e "const a=require('node:assert/strict');a.equal(process.platform,'${{ matrix.platform }}');a.equal(process.arch,'${{ matrix.arch }}');"
       - name: Reuse portable model weights; inference re-verifies their hash
         uses: actions/cache@v4
         with:
@@ -42,11 +48,13 @@ jobs:
       - run: npm run test:desktop
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - run: npm run test:computer
       - run: npm run package
       - run: npm run test:packaged
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: development-installer-${{ matrix.os }}
           retention-days: 3
@@ -57,3 +65,4 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/computer-*.json

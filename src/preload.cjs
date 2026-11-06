@@ -1,6 +1,7 @@
 const { contextBridge, ipcRenderer } = require("electron");
 const channels = new Set([
   "state",
+  "computer.access",
   "project.create",
   "project.open",
   "project.policy",

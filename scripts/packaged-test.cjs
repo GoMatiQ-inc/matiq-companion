@@ -16,20 +16,15 @@ if (!executable)
   throw Error(
     "Build the native application before running packaged qualification.",
   );
-const result = spawnSync(
-  process.execPath,
-  [path.join(__dirname, "desktop-test.cjs")],
-  {
+for (const fixture of ["desktop-test.cjs", "computer-test.cjs"]) {
+  const result = spawnSync(process.execPath, [path.join(__dirname, fixture)], {
     env: { ...process.env, COMPANION_EXECUTABLE_PATH: executable },
     stdio: "inherit",
     timeout: 120000,
-  },
-);
-if (result.error) throw result.error;
-if (result.status !== 0)
-  throw Error(
-    `Packaged desktop qualification failed (${result.status ?? result.signal}).`,
-  );
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw Error(`Packaged ${fixture} failed (${result.status ?? result.signal}).`);
+}
 console.log(
   "PASS: packaged native application completed the real desktop/inference workflow.",
 );

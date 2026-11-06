@@ -15,7 +15,8 @@ const assert = require("node:assert/strict");
   }, 90000);
   try {
     app = await electron.launch({
-      args: [path.resolve(__dirname, "..")],
+      executablePath: process.env.COMPANION_EXECUTABLE_PATH || undefined,
+      args: process.env.COMPANION_EXECUTABLE_PATH ? [] : [path.resolve(__dirname, "..")],
       env: { ...process.env, COMPANION_TEST_PROFILE: profile },
     });
     processHandle = app.process();
@@ -23,14 +24,16 @@ const assert = require("node:assert/strict");
     app.on("console", (m) => console.log("Electron:", m.text()));
     await app.firstWindow();
     const result = await app.evaluate(
-      async ({ BrowserWindow }, root) => {
-        const { createComputer } = process.mainModule.require(
-          root + "/src/computer.cjs",
-        );
+      async ({ BrowserWindow, app, screen }) => {
+        const root = app.getAppPath();
+        const { createComputer } = process.mainModule.require(root + "/src/computer.cjs");
+        const { computerAccess } = process.mainModule.require(root + "/src/computer-access.cjs");
         const main = BrowserWindow.getAllWindows()[0];
         const fixture = new BrowserWindow({
           width: 800,
           height: 600,
+          x: screen.getPrimaryDisplay().workArea.x + 40,
+          y: screen.getPrimaryDisplay().workArea.y + 60,
           webPreferences: {
             sandbox: true,
             contextIsolation: true,
@@ -41,29 +44,41 @@ const assert = require("node:assert/strict");
           await fixture.loadURL(
             "data:text/html," +
               encodeURIComponent(
-                '<html><body style="background:white;font:40px sans-serif"><p>Companion computer verification</p><input id="target" style="font:32px sans-serif" autofocus></body></html>',
+                '<html><body style="background:white;color:black;font:32px sans-serif"><p>Companion computer verification</p><label for="target">Target</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="margin-top:40px;font:32px sans-serif">Confirm</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>',
               ),
           );
           fixture.show();
           fixture.focus();
           const computer = createComputer(main);
-          console.log("Capturing fixture screen");
-          const observed = await computer(
-            "observe_screen",
-            {},
-            new AbortController().signal,
-          );
-          console.log("Screen captured");
-          await computer(
-            "type_text",
-            { text: "Local input verified" },
-            new AbortController().signal,
-          );
+          const signal = new AbortController().signal;
+          const observe = () => computer("observe_screen", {}, signal);
+          const observed = await observe();
+          const target = observed.words.find((word) => /^target$/i.test(word.text));
+          if (!target) throw Error("OCR did not locate the fixture Target label.");
+          await computer("click_screen", { x: target.x, y: target.y }, signal);
+          if (await fixture.webContents.executeJavaScript('document.activeElement.id') !== "target") throw Error("Native pointer click did not focus the fixture input.");
+          let staleRejected = false;
+          try { await computer("type_text", { text: "must not type" }, signal); }
+          catch (error) { if (!/Observe the screen again/.test(error.message)) throw error; staleRejected = true; }
+          if (!staleRejected) throw Error("Input reused an invalidated observation.");
+          await observe();
+          await computer("type_text", { text: process.platform === "linux" ? "Local input verified!" : "Local input verified café!" }, signal);
+          await observe();
+          await computer("press_key", { key: "Backspace" }, signal);
+          const last = await observe();
+          const confirm = last.words.find((word) => /^confirm$/i.test(word.text));
+          if (!confirm) throw Error("OCR did not locate the Confirm button.");
+          await computer("click_screen", { x: confirm.x, y: confirm.y }, signal);
           return {
             text: observed.text,
-            value: await fixture.webContents.executeJavaScript(
-              'document.getElementById("target").value',
-            ),
+            value: await fixture.webContents.executeJavaScript('document.getElementById("target").value'),
+            clicks: await fixture.webContents.executeJavaScript('window.clicks'),
+            trustedMouse: await fixture.webContents.executeJavaScript('window.trustedMouse'),
+            trustedKey: await fixture.webContents.executeJavaScript('window.trustedKey'),
+            staleRejected,
+            access: computerAccess(),
+            scaleFactor: screen.getPrimaryDisplay().scaleFactor,
+            packaged: app.isPackaged,
           };
         } finally {
           fixture.destroy();
@@ -72,10 +87,23 @@ const assert = require("node:assert/strict");
       path.resolve(__dirname, ".."),
     );
     assert.match(result.text, /computer verification/i);
-    assert.equal(result.value, "Local input verified");
+    assert.equal(result.value, process.platform === "linux" ? "Local input verified" : "Local input verified café");
+    assert.equal(result.clicks, 1);
+    assert.equal(result.trustedMouse, true);
+    assert.equal(result.trustedKey, true);
+    assert.equal(result.staleRejected, true);
+    await fs.mkdir(".validation", { recursive: true });
+    await fs.writeFile(path.join(".validation", `computer-${process.platform}-${process.arch}-${result.packaged ? "packaged" : "development"}.json`), JSON.stringify({ platform: process.platform, arch: process.arch, ...result }, null, 2) + "\n");
     console.log(
-      "PASS: actual local screen OCR and native typing into an isolated fixture.",
+      `PASS: real screen OCR, pointer focus/click, ${process.platform === "linux" ? "ASCII" : "Unicode"} typing, key input and observation invalidation in an owned fixture.`,
     );
+  } catch (error) {
+    let access;
+    try { access = await app.evaluate(({ app }) => process.mainModule.require(app.getAppPath() + "/src/computer-access.cjs").computerAccess()); }
+    catch (diagnosticError) { access = { unavailable: diagnosticError.message }; }
+    await fs.mkdir(".validation", { recursive: true });
+    await fs.writeFile(path.join(".validation", `computer-${process.platform}-${process.arch}-failure.json`), JSON.stringify({ platform: process.platform, arch: process.arch, error: error.message, access }, null, 2) + "\n");
+    throw error;
   } finally {
     await app?.close();
     await lifecycle.verifyStopped(owned);

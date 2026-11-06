@@ -8,21 +8,21 @@
   "main": "src/main.cjs",
   "license": "SEE LICENSE IN LICENSE",
   "scripts": {
-    "start": "electron .",
+    "start": "npm run native:build && electron .",
     "test": "node --test test/*.test.cjs",
     "test:desktop": "node scripts/desktop-test.cjs",
     "test:inference": "node scripts/inference-test.mjs",
-    "package": "electron-builder --publish never",
-    "package:dir": "electron-builder --dir --publish never",
+    "package": "npm run native:build && electron-builder --publish never",
+    "package:dir": "npm run native:build && electron-builder --dir --publish never",
     "test:tools": "node scripts/tool-inference-test.cjs",
-    "test:computer": "node scripts/computer-test.cjs",
+    "test:computer": "npm run native:build && node scripts/computer-test.cjs",
     "test:packaged": "node scripts/packaged-test.cjs",
-    "package:release": "node scripts/release.cjs",
+    "package:release": "npm run native:build && node scripts/release.cjs",
     "test:signatures": "node scripts/verify-mac-signing.mjs",
-    "test:upgrade": "node scripts/upgrade-test.cjs"
+    "test:upgrade": "node scripts/upgrade-test.cjs",
+    "native:build": "node scripts/build-computer.cjs"
   },
   "dependencies": {
-    "@nut-tree-fork/nut-js": "4.2.6",
     "@tesseract.js-data/eng": "1.0.0",
     "@xmldom/xmldom": "0.9.12",
     "adm-zip": "0.6.1",
@@ -36,7 +36,8 @@
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
     "playwright": "1.64.1",
-    "js-yaml": "4.3.2"
+    "js-yaml": "4.3.2",
+    "@nut-tree-fork/nut-js": "4.2.6"
   },
   "build": {
     "appId": "com.matiq.companion",
@@ -56,7 +57,8 @@
       "node_modules/**/*.dylib",
       "node_modules/**/*.so*",
       "node_modules/@tesseract.js-data/**/*",
-      "node_modules/tesseract.js-core/**/*"
+      "node_modules/tesseract.js-core/**/*",
+      "src/native/*.node"
     ],
     "mac": {
       "target": [
@@ -72,7 +74,8 @@
         "NSAppleEventsUsageDescription": "MatiQ Companion controls apps only for approved computer actions."
       },
       "artifactName": "MatiQ-Companion-${version}-mac-${arch}.${ext}",
-      "identity": "-"
+      "identity": "-",
+      "minimumSystemVersion": "14.2"
     },
     "win": {
       "target": [
