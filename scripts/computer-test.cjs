@@ -37,7 +37,8 @@ const {execFileSync}=require('node:child_process');
           assert.equal(changed.words.filter(w=>/^yes$/i.test(w.text)).length,yes.length-1,'The optional CI privacy switch did not turn off. Inspect before continuing.');
           desktopPreparation.togglesDisabled++;setup=changed;
         } else {
-          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text) && w.x>setup.width*0.7 && w.y>setup.height*0.75) || (desktopPreparation.pages===0 && desktopPreparation.togglesDisabled===2 ? {x:867,y:656} : null);
+          const inspectedPage=desktopPreparation.togglesDisabled===2 && (desktopPreparation.pages===0 || (desktopPreparation.pages===1 && /Personalized\s+offers/i.test(setup.text) && /Select\s+Learn\s+more/i.test(setup.text)));
+          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text) && w.x>setup.width*0.7 && w.y>setup.height*0.75) || (inspectedPage ? {x:867,y:656} : null);
           assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing: '+JSON.stringify(setup.words.map(w=>w.text)));
           await act('click_screen',{x:next.x,y:next.y});desktopPreparation.pages++;
           setup=await act('observe_screen');
@@ -48,7 +49,7 @@ const {execFileSync}=require('node:child_process');
       await fs.writeFile('.validation/desktop-preparation-win32-arm64.json',JSON.stringify(desktopPreparation,null,2)+'\n');
     }
     const entry=path.join(profile,'target.cjs');
-    const html='<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">Verify</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>';
+    const html='<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">INPUTFIELD</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">Verify</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>';
     await fs.writeFile(entry,`const {app,BrowserWindow,screen}=require('electron');app.setName('Companion Input Target');app.setPath('userData',${JSON.stringify(path.join(profile,'target-profile'))});app.whenReady().then(async()=>{if(process.platform==='darwin')app.setActivationPolicy('regular');const area=screen.getPrimaryDisplay().workArea;const window=new BrowserWindow({width:800,height:600,x:area.x+40,y:area.y+60,alwaysOnTop:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});await window.loadURL('data:text/html,'+encodeURIComponent(${JSON.stringify(html)}));window.show();app.focus({steal:true});window.focus();});app.on('window-all-closed',()=>app.quit());`);
     let targetExecutable=require('electron');
     if(process.platform==='darwin') {
@@ -67,7 +68,7 @@ const {execFileSync}=require('node:child_process');
     await page.getByText('Companion computer verification',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
     const observed=await act('observe_screen');
-    const label=observed.words.find(w=>/^target$/i.test(w.text));
+    const label=observed.words.find(w=>/^inputfield$/i.test(w.text));
     if(!label) {
       if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64' && /Choose privacy settings/i.test(observed.text)) {
         const png=await app.evaluate(async({desktopCapturer,screen})=>{const display=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:display.size.width,height:display.size.height}});return sources.find(s=>s.display_id===String(display.id)).thumbnail.toPNG().toString('base64');});
@@ -82,7 +83,7 @@ const {execFileSync}=require('node:child_process');
     let focusClicks=1;
     if(await page.evaluate(()=>document.activeElement.id)!=='target') {
       // Some inactive applications consume the first mouse click solely for activation.
-      const fresh=await act('observe_screen'),again=fresh.words.find(w=>/^target$/i.test(w.text));
+      const fresh=await act('observe_screen'),again=fresh.words.find(w=>/^inputfield$/i.test(w.text));
       assert.ok(again,'Observe the field again before the activation follow-up click.');
       await act('click_screen',{x:again.x,y:again.y});focusClicks++;
     }

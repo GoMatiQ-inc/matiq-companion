@@ -166,6 +166,16 @@ async function bundleVersion(apps) {
   await fs.copyFile(source.location(MODELS[0]), model);
   const targetDirectory = path.join(root, "upgrade-target"),
     metadataName = windows ? "latest.yml" : "latest-mac.yml";
+  if(!windows) {
+    const {verifyUpdateAssets,macUpdateFeed}=await import('./verify-update-assets.mjs');
+    const yaml=require('js-yaml'),otherDirectory=path.join(root,'other-upgrade-target');
+    await verifyUpdateAssets(targetDirectory,targetVersion,'darwin',process.arch);
+    await verifyUpdateAssets(otherDirectory,targetVersion,'darwin',process.arch==='arm64'?'x64':'arm64');
+    const native=yaml.load(await fs.readFile(path.join(targetDirectory,metadataName),'utf8'));
+    const other=yaml.load(await fs.readFile(path.join(otherDirectory,metadataName),'utf8'));
+    const entries=process.arch==='arm64'?[native,other]:[other,native];
+    await fs.writeFile(path.join(targetDirectory,metadataName),macUpdateFeed(...entries));
+  }
   const allowed = new Set([
     metadataName,
     `MatiQ-Companion-${targetVersion}-${windows ? "windows" : "mac"}-${process.arch}.${windows ? "exe" : "zip"}`,
@@ -387,6 +397,7 @@ async function bundleVersion(apps) {
         modelSha256: true,
         generatedFile: true,
       },
+      updateFeedSha256: await hash(path.join(targetDirectory,metadataName)),
       feed: "test-owned loopback fixture",
       at: new Date().toISOString(),
     };

@@ -42,3 +42,12 @@ export async function verifyUpdateAssets(directory, version, platform, arch = pl
     assert.equal(metadata.sha512, metadata.files[0].sha512);
   return [name, metadataName];
 }
+
+export function macUpdateFeed(arm, intel) {
+  assert.equal(arm.version,intel.version,"Both Mac update entries must have the same version.");
+  for(const [metadata,arch] of [[arm,'arm64'],[intel,'x64']]) {
+    assert.equal(metadata.files?.length,1,"Use exactly one verified update per architecture.");
+    assert.equal(metadata.files[0].url,`MatiQ-Companion-${metadata.version}-mac-${arch}.zip`,"Keep native update architecture entries in their verified order.");
+  }
+  return yaml.dump({...intel,files:[...arm.files,...intel.files]});
+}

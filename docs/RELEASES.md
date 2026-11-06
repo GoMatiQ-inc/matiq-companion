@@ -44,3 +44,5 @@ requires this proof on both architectures and for the previous public release
 upgrade. The harness refuses existing app/profile/receipt state, limits process
 cleanup to the owned bundle/cache, and removes only its installed app and receipt.
 A user-owned ZIP upgrade alone does not establish system-PKG update behavior.
+
+The native upgrade jobs use the combined Apple Silicon/Intel feed and verify the replacement executable architecture with `lipo`. The previous-public-version proof records the combined feed SHA256; publication must reproduce that exact feed from the qualified artifact metadata. A single-architecture feed test is insufficient for the two-architecture release.

@@ -8,7 +8,7 @@ The candidate adds native Quartz and Windows SendInput adapters, Mac permission 
 
 - All 25 unit tests pass, including file boundaries, revocation, document round trips, model integrity, updater state and publication checks.
 - [Run 42259539248](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42259539248) passes Windows x64 development and packaged cross-application computer use. Mac activation/input and Windows ARM first-run setup failed; those platforms remain unqualified for computer use.
-- [Run 42263806947](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42263806947) checks the subsequent permission diagnostics and ARM setup correction. Consult its actual conclusions before claiming support.
+- [Run 42264981228](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42264981228) exposed a Mac fixture title/field-label collision and an accessory-window target mismatch. The corrected fixture uses a unique input label; native targeting uses Accessibility hit-testing with a regular-window fallback. These corrections still require exact-source native qualification.
 - Linux bounded Xvfb checks pass actual local inference, model-to-DOCX execution, Electron workflows, OCR and separate-process input. Linux is a development test environment, not a released desktop platform.
 - [Voice v0.3.9](https://github.com/GoMatiQ-inc/matiq-voice/releases/tag/v0.3.9) ships the shared-store bridge. [Its qualification run](https://github.com/GoMatiQ-inc/matiq-voice/actions/runs/42251136812) verifies actual speech inference, adoption by another profile, artifact hashes/inodes and offline reuse. Earlier Voice versions do not participate automatically.
 

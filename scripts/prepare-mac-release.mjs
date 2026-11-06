@@ -4,7 +4,7 @@ import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import yaml from 'js-yaml';
-import {verifyUpdateAssets} from './verify-update-assets.mjs';
+import {verifyUpdateAssets,macUpdateFeed} from './verify-update-assets.mjs';
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export async function prepareMacRelease(input, output, version) {
   assert.match(version,/^\d+\.\d+\.\d+$/);
@@ -40,14 +40,17 @@ export async function prepareMacRelease(input, output, version) {
       const previous=JSON.parse(await fs.readFile(path.join(input,'published-upgrade-proof.json'),'utf8'));
       assert.equal(previous.installation,'system-pkg');
       assert.equal(previous.targetVersion,version); assert.equal(previous.targetZipSha256,proof.assets[zip]);
+      assert.match(previous.updateFeedSha256,/^[a-f0-9]{64}$/);
       assert.match(previous.baseVersion,/^\d+\.\d+\.\d+$/);
       assert.notEqual(previous.baseVersion,version);
       for(const key of ['signedDownloadRestart','automaticRelaunch']) assert.equal(previous[key],true);
       for(const key of ['project','settings','modelSha256','generatedFile']) assert.equal(previous.retained[key],true);
     }
   }
-  const merged={...metadata[1],files:metadata.flatMap(m=>m.files)};
-  published.set('latest-mac.yml',Buffer.from(yaml.dump(merged)));
+  const feed=Buffer.from(macUpdateFeed(metadata[0],metadata[1]));
+  const previous=JSON.parse(await fs.readFile(path.join(input,'published-upgrade-proof.json'),'utf8'));
+  assert.equal(previous.updateFeedSha256,digest(feed),'Publish the same combined feed qualified by the previous public app.');
+  published.set('latest-mac.yml',feed);
   await fs.mkdir(output,{recursive:true});
   assert.deepEqual(await fs.readdir(output),[],'Use an empty task-owned release output directory.');
   const sums=[];

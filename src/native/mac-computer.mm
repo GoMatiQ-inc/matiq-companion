@@ -42,7 +42,14 @@ static napi_value Click(napi_env env, napi_callback_info info) {
   napi_get_cb_info(env,info,&count,args,nullptr,nullptr);
   if (count!=2 || napi_get_value_double(env,args[0],&x)!=napi_ok || napi_get_value_double(env,args[1],&y)!=napi_ok || !std::isfinite(x) || !std::isfinite(y)) return Fail(env,"Supply finite screen coordinates.");
   CGPoint point=CGPointMake(x,y);
-  pid_t target=0;CFArrayRef windows=CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly,kCGNullWindowID);
+  pid_t target=0;
+  AXUIElementRef system=AXUIElementCreateSystemWide(),element=nullptr;
+  if(AXUIElementCopyElementAtPosition(system,x,y,&element)==kAXErrorSuccess && element) {
+    AXUIElementGetPid(element,&target);CFRelease(element);
+  }
+  CFRelease(system);
+  if(target==getpid())target=0;
+  CFArrayRef windows=target?nullptr:CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly,kCGNullWindowID);
   if(windows){
     for(CFIndex i=0;i<CFArrayGetCount(windows);i++){
       CFDictionaryRef item=static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows,i));CGRect bounds{};pid_t owner=0;double alpha=1;
@@ -50,7 +57,10 @@ static napi_value Click(napi_env env, napi_callback_info info) {
       auto pid=static_cast<CFNumberRef>(CFDictionaryGetValue(item,kCGWindowOwnerPID));
       auto opacity=static_cast<CFNumberRef>(CFDictionaryGetValue(item,kCGWindowAlpha));
       if(opacity)CFNumberGetValue(opacity,kCFNumberDoubleType,&alpha);
-      if(rectangle&&pid&&alpha>0&&CGRectMakeWithDictionaryRepresentation(rectangle,&bounds)&&CGRectContainsPoint(bounds,point)&&CFNumberGetValue(pid,kCFNumberIntType,&owner)&&owner>0&&owner!=getpid()){target=owner;break;}
+      if(rectangle&&pid&&alpha>0&&CGRectMakeWithDictionaryRepresentation(rectangle,&bounds)&&CGRectContainsPoint(bounds,point)&&CFNumberGetValue(pid,kCFNumberIntType,&owner)&&owner>0&&owner!=getpid()){
+        NSRunningApplication* application=[NSRunningApplication runningApplicationWithProcessIdentifier:owner];
+        if(application && application.activationPolicy==NSApplicationActivationPolicyRegular){target=owner;break;}
+      }
     }
     CFRelease(windows);
   }
