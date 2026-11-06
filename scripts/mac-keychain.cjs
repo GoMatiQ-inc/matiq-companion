@@ -30,7 +30,12 @@ async function withMacKeychain(env, operation, { run } = {}) {
   const execute =
     run ||
     ((args) => {
-      const result = spawnSync("/usr/bin/security", args, {
+      const quote = (value) => {
+        if (/[\r\n\0]/.test(value)) throw Error('Keychain arguments must not contain line breaks or NUL.');
+        return '"' + value.replaceAll('\\', '\\\\').replaceAll('"', '\\"') + '"';
+      };
+      const result = spawnSync("/usr/bin/security", ['-i'], {
+        input: args.map(quote).join(' ') + '\n',
         encoding: "utf8",
         timeout: 30000,
       });
