@@ -3,3 +3,7 @@ dist/
 .validation/
 *.partial*
 .DS_Store
+
+src/native/*.node
+
+.native-build/

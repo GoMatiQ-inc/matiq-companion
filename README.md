@@ -24,13 +24,13 @@ For later releases, use **Settings → Check for updates → Download update →
 
 ## Development
 
-Use Node 22 or newer. Run `npm ci`, `npm test`, then `npm start`. Linux desktop tests need an X server (`xvfb-run -a npm run test:desktop`). `npm run package` builds the current platform installer without publishing it. Native dependencies must be installed and packaged on the target platform.
+Use Node 24, matching the embedded inference-worker runtime. Run `npm ci`, `npm test`, then `npm start`. Linux desktop tests need an X server (`xvfb-run -a npm run test:desktop`). `npm run package` builds the current platform installer without publishing it. Native dependencies must be installed and packaged on the target platform.
 
 `npm run test:inference` downloads and verifies the smallest catalog model and performs real native inference (Metal on qualified Apple Silicon runners; a CPU baseline on hosted Windows runners). Set `COMPANION_VALIDATION_MODELS` to an isolated model-store directory; never point tests at someone else's live profile. See [model storage](docs/MODELS.md), [security boundaries](docs/SECURITY.md), and [release/update qualification](docs/RELEASES.md).
 
 ## MatiQ Voice interoperability
 
-Both apps use a typed MatiQ model-store layout. Shared artifacts are identified by kind and hash; ASR, speaker and chat models remain distinct. Voice requires the shared-store bridge update before it participates. Companion does not modify an installed Voice profile. Existing Voice worker paths can use hard links on the same filesystem, with a copy fallback across volumes. Sharing a directory does not make a speech model usable as a chat model.
+Both apps use a typed MatiQ model-store layout. Shared artifacts are identified by kind and hash; ASR, speaker and chat models remain distinct. MatiQ Voice 0.3.9 and later include the shared-store bridge; update older installations before expecting sharing. Companion does not modify an installed Voice profile. Existing Voice worker paths can use hard links on the same filesystem, with a copy fallback across volumes. Sharing a directory does not make a speech model usable as a chat model.
 
 ## License
 

@@ -249,6 +249,18 @@ function render() {
     downloadUpdate.disabled = u.status !== "available";
     restartUpdate.disabled = u.status !== "downloaded";
     panel.append(actions(checkUpdate, downloadUpdate, restartUpdate));
+    const access = el("div", undefined, "panel");
+    access.append(el("h2", "Computer access"), el("p", `Screen: ${snapshot.computerAccess.screen}. Input: ${snapshot.computerAccess.input}.`));
+    if (snapshot.hardware.platform === "darwin") {
+      access.append(el("p", "Approve MatiQ Companion in macOS Screen Recording and Accessibility. Restart after changing Screen Recording. Project tools and individual action approvals remain separate."));
+      access.append(actions(
+        button("Request Screen Recording", async () => { await call("computer.access", { kind: "screen" }); await refresh(); }),
+        button("Request Accessibility", async () => { await call("computer.access", { kind: "input" }); await refresh(); }),
+        button("Refresh access status", refresh),
+      ));
+    } else access.append(el("p", "Computer tools operate normal desktop windows. Secure and elevated windows may block input."));
+    root.append(access);
+
     root.append(
       panel,
       el(

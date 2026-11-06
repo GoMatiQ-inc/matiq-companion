@@ -17,6 +17,7 @@ const { MODELS } = require("./catalog.cjs");
 const { hardware, recommend } = require("./hardware.cjs");
 const { Tools } = require("./tools.cjs");
 const { createComputer } = require("./computer.cjs");
+const { computerAccess, requestComputerAccess } = require("./computer-access.cjs");
 const { configureUpdates } = require("./updates.cjs");
 if (process.env.COMPANION_TEST_PROFILE) {
   app.setPath("userData", path.resolve(process.env.COMPANION_TEST_PROFILE));
@@ -64,6 +65,7 @@ async function state() {
     models: statuses,
     sharedInventory: await models.inventory(),
     modelRoot: models.root,
+    computerAccess: computerAccess(),
     settings,
     projects: await projects.list(),
     runtime,
@@ -180,6 +182,8 @@ async function request(name, args = {}) {
   switch (name) {
     case "state":
       return state();
+    case "computer.access":
+      return requestComputerAccess(args.kind);
     case "project.create":
       return projects.create(args.name);
     case "project.open":

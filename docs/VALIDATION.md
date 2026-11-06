@@ -1,35 +1,55 @@
 # Validation record
 
-Initial implementation, November 5, 2026. These checks establish a working prototype; they do not establish a signed public release.
+Updated November 6, 2026. Qualification applies to the exact source and artifact bytes linked below.
 
-## Reproducible checks
+## Completion candidate 0.1.1
 
-- `npm test`: file-grant boundaries, symlink/junction rejection, revocation during approval, disabled/denied actions, protected application state, original-file backup, non-overwriting moves, real DOCX/XLSX round trips, model checksum/deduplication, DNS pinning/private redirects, manual updater transitions and release-signing configuration gates.
-- `COMPANION_VALIDATION_MODELS=/isolated/test/store npm run test:inference`: download official Qwen3 0.6B, verify exact bytes/hash and run actual native inference.
-- With that same isolated model store, `npm run test:tools`: real model calls approved create_word; read back actual generated DOCX content.
-- `npm run test:desktop`: real Electron navigation, persisted project permissions and model setup. Supplying the isolated model store also exercises real inference through the Electron worker and renderer. Linux uses `timeout 105 xvfb-run -a npm run test:desktop`.
-- `npm run test:computer`: actual primary-screen OCR and native typing into an owned disposable window. Linux Xvfb fixture passed; macOS/Windows screen/privacy and native input are still pending qualification. The app returns an input-attempt receipt, not proof of target success.
+The candidate adds native Quartz and Windows SendInput adapters, Mac permission controls, and four native CI targets: Apple Silicon Mac, Intel Mac, Windows x64 and Windows ARM64. It has **not** been signed or published as a completed release.
 
-Linux unit tests, actual local inference, actual model-to-DOCX tool execution, Electron workflow and computer fixture passed. A live approved public-search module check returned five genuine results. Native CI results are linked in the GitHub Actions history; consult the exact commit, not an older green build.
+- All 27 unit tests pass, including file boundaries, revocation, document round trips, model integrity, updater state and publication checks.
+- [Run 42259539248](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42259539248) passes Windows x64 development and packaged cross-application computer use. Mac activation/input and Windows ARM first-run setup failed; those platforms remain unqualified for computer use.
+- [Run 42264981228](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42264981228) exposed a Mac fixture title/field-label collision and an accessory-window target mismatch. The corrected fixture uses a unique input label; native targeting uses Accessibility hit-testing with a regular-window fallback. These corrections still require exact-source native qualification.
+- Linux bounded Xvfb checks pass actual local inference, model-to-DOCX execution, Electron workflows, OCR and separate-process input. Linux is a development test environment, not a released desktop platform.
+- [Voice v0.3.9](https://github.com/GoMatiQ-inc/matiq-voice/releases/tag/v0.3.9) ships the shared-store bridge. [Its qualification run](https://github.com/GoMatiQ-inc/matiq-voice/actions/runs/42251136812) verifies actual speech inference, adoption by another profile, artifact hashes/inodes and offline reuse. Earlier Voice versions do not participate automatically.
 
-## Signed Mac release — November 6, 2026
+The computer fixture requires OCR, native pointer focus, Unicode input, Backspace and a button click in a **separate application process**, plus stale-observation rejection. `test:packaged` repeats this using the actual packaged Companion executable. Earlier in-process fixture passes do not establish cross-application control. Mac input requires both Accessibility and event-posting access; observation requires Screen Recording. Permission requests use normal OS controls, without bypasses.
 
-[MatiQ Companion v0.1.0](https://github.com/GoMatiQ-inc/matiq-companion/releases/tag/v0.1.0) publishes the qualified Apple Silicon Mac PKG, update ZIP/metadata/blockmap and SHA256SUMS. Qualified binary source: `2a31fe6d3bc0afec6fe641ed5e53713a87c9edcc`.
+The Windows ARM hosted image displays first-run privacy setup above test applications. The fixture can initialize only a fresh disposable GitHub-hosted ARM VM: it recognizes the inspected 1024×768 page, disables visible optional Yes switches and checks each transition before continuing. An unfamiliar layout or failed transition stops the test. This preparation never runs on an installed user's computer.
 
-- [Exact-source native CI](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42175095673) passes on macOS and Windows: all 24 tests, actual verified model inference, model-to-DOCX tool execution, Electron workflows, installer packaging and packaged inference. Update actions are checked for unavailable-state disabling.
-- [Signed build and actual upgrade](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42175098112) pass: Developer ID app/native signatures and PKG signature, notarization, stapling, Gatekeeper, extracted ZIP verification, bundle identity/version and exact update-metadata bytes.
-- The actual Settings check/download/restart flow installed the separately signed qualification target 0.1.1, observed a new same-user macOS finished-launching process and preserved project/settings/generated-file/model hashes. Qualification target 0.1.1 is not published. The proof covers base ZIP SHA256 `5cc96ad58cfd35764ee5023ae9bc5540c670f136a9e0cf8bca65e2c50d539dec`.
-- The native restart test uses the signed ZIP in a user-owned app location and unchanged default data paths on a disposable CI VM. It does not automate administrator prompts for PKG installation into /Applications. Owned processes and captured inspector/fixture listeners are independently checked absent after cleanup.
-- [Publication CI](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42177529259) reused the qualified bytes and verified every downloadable asset against its signature manifest. Build diagnostics are excluded from release assets.
+The candidate release pipeline requires independently signed builds and real root-owned PKG upgrades for both Mac architectures, plus an upgrade from the current public Apple Silicon release into the exact candidate ZIP. These new system-installed update paths are **not yet qualified**. Windows per-user NSIS upgrade/relaunch and retained-data checks are implemented but remain **unqualified until Microsoft issues the company certificate profile**.
 
-An earlier test clicked Restart before the ZIP completed: its async Playwright predicate was treated as ready, while the backend correctly rejected the request. Awaited polling, state-gated UI actions and immediate pending-download state fix that defect; regression tests cover it. An older Windows native attempt produced a valid response then exited 1 during shutdown and passed a controlled rerun; the current exact-source run passes without a retry. No exit status or failed qualification was ignored.
+Microsoft's live identity-validation list on November 6 shows **In Progress**. No new owner document request was confirmed. The historical certificate-profile API error does not establish that the identity request disappeared. Signing configuration alone is not issuance, and unsigned or self-signed installers cannot satisfy distribution gates.
 
-## Remaining qualification
+Development and release CI use Node 24, matching Electron 45.2.3's embedded Node 24.22.2 worker runtime. The earlier Node 22 standalone harness intermittently terminated inside model disposal. Run 42270732872 completed five unmapped and five default mapped Windows x64 lifetimes, so that comparison did not isolate mapping as the cause; production memory mapping remains unchanged. The worker fixture now uses the actual Electron executable, awaits the full tool response, then forces five model unload/reload cycles through the production IPC worker. Packaged qualification repeats it from the ASAR worker. Linux passed actual document creation, complete replies, all five reloads and independent worker cleanup; native exact-source results remain required.
 
-- Signed Windows distribution needs Microsoft's valid company identity-validation record, resulting certificate profile and verified publisher. The existing account currently has no certificate profile; creation was rejected because identity-validation details were not found. Signing infrastructure is configured, but issuance is not being claimed complete.
-- Qualify screen capture/input on the actual supported operating systems with their privacy permissions.
-- Ship the separate Voice model-store bridge before claiming existing Voice installations share the directory.
-- Intel Mac and Windows ARM builds are not qualified by this initial release.
+The worker now shares one initialization promise between concurrent hardware probing and chat; its real IPC fixture overlaps those requests and requires exactly one native initialization before the document response and five model reloads. Native computer actions restore Companion without taking focus from queued target input. GUI smoke isolates plain chat from the independent Office-tool journey and records visible failure evidence. Fixtures snapshot owned process descendants and listeners before shutdown, verify their absence afterwards and fail if child inspection is unavailable.
+
+Windows release preparation has unit coverage for malformed/wrong-architecture PE headers, altered installer bytes, inconsistent company publishers and attempts to omit a required prior-public-version upgrade proof. The signed pipeline combines platform architecture feeds and the publisher retains both platform feeds once Windows is public. These are implemented gates, **not** evidence of an issued Microsoft profile or a qualified signed Windows release.
+
+## Reproduce the checks
+
+Use an isolated `COMPANION_VALIDATION_MODELS` directory, never a live user's profile or model store.
+
+- `npm test`: security, persistence, models, updater transitions and release gates.
+- `npm run test:inference`: download and hash-check the official smallest Qwen model, then run actual native inference.
+- `npm run test:tools`: real model-to-approved-tool execution and generated DOCX readback.
+- `npm run test:desktop`: Electron navigation, persisted permissions and actual inference through the worker/renderer.
+- `npm run test:computer`: actual OCR and native input into an independent owned application. macOS requires normal privacy access.
+- `npm run test:packaged`: desktop and computer checks against the packaged executable.
+- `npm run test:upgrade`: real signed two-version install/download/restart, default-profile data preservation and independent process/port cleanup on a fresh disposable native CI VM.
+
+The fixture processes and listeners have finite watchdogs, owned-child identification and independent teardown checks. Computer actions return an input-attempt receipt; users must observe again to establish the target outcome.
+
+## Published Apple Silicon release 0.1.0
+
+[MatiQ Companion v0.1.0](https://github.com/GoMatiQ-inc/matiq-companion/releases/tag/v0.1.0) publishes the signed/notarized Apple Silicon PKG, signed update ZIP, metadata, blockmap and checksums. Binary source: `2a31fe6d3bc0afec6fe641ed5e53713a87c9edcc`.
+
+- [Native CI](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42175095673): 24 initial tests, actual verified inference, model-to-DOCX execution, Electron workflows, packaging and packaged inference on Mac ARM and Windows x64.
+- [Signed qualification](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42175098112): Developer ID app/native/PKG signatures, notarization, stapling, Gatekeeper, extracted ZIP and exact update checksum/size checks.
+- The actual Settings check/download/restart flow upgrades a **user-owned ZIP installation** to a separately signed qualification-only version and retains project/settings/generated-file/model hashes. This does not establish root-owned PKG update behavior or native computer control.
+- [Publication](https://github.com/GoMatiQ-inc/matiq-companion/actions/runs/42177529259) reuses those exact qualified bytes without rebuilding. Intel Mac and signed Windows are not included in this release.
+
+A previous updater fixture treated an unresolved Promise as readiness and clicked Restart too early; awaited polling and regression tests correct it. Windows inference has also produced a valid response followed by exit 1 during native shutdown in earlier attempts. Failed exit statuses remain failures; controlled reruns and later exact-source results do not erase that history.
 
 ## Dependency audit
 

@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.platform == 'mac' && '["macos-latest"]' || inputs.platform == 'windows' && '["windows-latest"]' || '["macos-latest","windows-latest"]') }}
+        os: ${{ fromJSON(inputs.platform == 'mac' && '["macos-latest","macos-15-intel"]' || inputs.platform == 'windows' && '["windows-latest","windows-11-arm"]' || '["macos-latest","macos-15-intel","windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     permissions:
@@ -37,7 +37,7 @@ jobs:
           node -e "const v=require('./package.json').version;const tag=process.env.GITHUB_REF_NAME;if(tag !== 'v'+v && !tag.startsWith('v'+v+'-signing.'))throw Error('Use the matching release or signing-validation tag')"
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - name: Reuse portable model weights; inference re-verifies their hash
         uses: actions/cache@v4
@@ -99,7 +99,6 @@ jobs:
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - name: Choose the next patch version for signed upgrade qualification
-        if: runner.os == 'macOS'
         id: next
         shell: bash
         run: echo "version=$(node -p "require('./package.json').version.split('.').map((n,i)=>Number(n)+(i===2?1:0)).join('.')")" >> "$GITHUB_OUTPUT"
@@ -118,6 +117,37 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Build the newer signed Windows version for actual upgrade qualification
+        if: runner.os == 'Windows'
+        run: npm run package:release
+        env:
+          COMPANION_RELEASE_VERSION: ${{ steps.next.outputs.version }}
+          COMPANION_RELEASE_OUTPUT: upgrade-target
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          MATIQ_AZURE_SIGN_ENDPOINT: ${{ secrets.MATIQ_AZURE_SIGN_ENDPOINT }}
+          MATIQ_AZURE_SIGN_ACCOUNT: ${{ secrets.MATIQ_AZURE_SIGN_ACCOUNT }}
+          MATIQ_AZURE_SIGN_PROFILE: ${{ secrets.MATIQ_AZURE_SIGN_PROFILE }}
+          MATIQ_WINDOWS_PUBLISHER: ${{ secrets.MATIQ_WINDOWS_PUBLISHER }}
+      - name: Verify the newer Windows publisher, signatures and update bytes
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/verify-windows-signing.ps1
+        env:
+          COMPANION_RELEASE_VERSION: ${{ steps.next.outputs.version }}
+          COMPANION_RELEASE_OUTPUT: upgrade-target
+          MATIQ_WINDOWS_PUBLISHER: ${{ secrets.MATIQ_WINDOWS_PUBLISHER }}
+      - uses: actions/upload-artifact@v4
+        if: runner.os == 'Windows'
+        with:
+          name: verified-windows-upgrade-target-${{ runner.arch }}
+          retention-days: 3
+          if-no-files-found: error
+          path: |
+            upgrade-target/*.exe
+            upgrade-target/latest.yml
+            upgrade-target/*.blockmap
+            upgrade-target/windows-signature.json
       - name: Verify the newer signed application and update ZIP
         if: runner.os == 'macOS'
         run: npm run test:signatures
@@ -129,7 +159,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: verified-mac-upgrade-target
+          name: verified-mac-upgrade-target-${{ runner.arch }}
           retention-days: 3
           if-no-files-found: error
           path: |
@@ -153,13 +183,17 @@ jobs:
   upgrade:
     needs: signed
     if: inputs.platform != 'windows'
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - uses: actions/cache@v4
         with:
@@ -172,13 +206,72 @@ jobs:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/download-artifact@v4
         with:
-          name: signed-macos-latest
+          name: signed-${{ matrix.os }}
           path: dist
       - uses: actions/download-artifact@v4
         with:
-          name: verified-mac-upgrade-target
+          name: verified-mac-upgrade-target-${{ runner.arch }}
           path: upgrade-target
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-mac-upgrade-target-${{ runner.arch == 'ARM64' && 'X64' || 'ARM64' }}
+          path: other-upgrade-target
       - name: Qualify real signed download, restart and retained projects/models
+        timeout-minutes: 8
+        run: npm run test:upgrade
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+          COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: signed-upgrade-diagnostics-${{ runner.arch }}
+          retention-days: 3
+          if-no-files-found: ignore
+          path: .validation/upgrade-diagnostic.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-upgrade-proof-${{ runner.arch }}
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/upgrade-proof.json
+  windows-upgrade:
+    needs: signed
+    if: inputs.platform != 'mac'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/companion-models
+          key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
+          enableCrossOsArchive: true
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:inference
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-${{ matrix.os }}
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-windows-upgrade-target-${{ runner.arch }}
+          path: upgrade-target
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-windows-upgrade-target-${{ runner.arch == 'ARM64' && 'X64' || 'ARM64' }}
+          path: other-upgrade-target
+      - name: Qualify signed per-user installation, download, restart and retained data
         timeout-minutes: 8
         run: npm run test:upgrade
         env:
@@ -186,31 +279,91 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: signed-upgrade-diagnostics
+          name: signed-windows-upgrade-diagnostics-${{ runner.arch }}
+          include-hidden-files: true
           retention-days: 3
-          if-no-files-found: ignore
           path: .validation/upgrade-diagnostic.json
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-upgrade-proof
+          name: windows-upgrade-proof-${{ runner.arch }}
           retention-days: 7
           if-no-files-found: error
           path: dist/upgrade-proof.json
+  published-upgrade:
+    name: published-upgrade (${{ matrix.os }})
+    needs: signed
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.platform == 'mac' && '[{"os":"macos-latest","other_os":"macos-15-intel"}]' || inputs.platform == 'windows' && '[{"os":"windows-latest","other_os":"windows-11-arm"},{"os":"windows-11-arm","other_os":"windows-latest"}]' || '[{"os":"macos-latest","other_os":"macos-15-intel"},{"os":"windows-latest","other_os":"windows-11-arm"},{"os":"windows-11-arm","other_os":"windows-latest"}]') }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - name: Inspect and checksum the current public release
+        id: previous
+        run: node scripts/prepare-public-upgrade.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/cache@v4
+        if: steps.previous.outputs.has_previous == '1'
+        with:
+          path: ${{ runner.temp }}/companion-models
+          key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
+          enableCrossOsArchive: true
+      - run: npm ci --no-audit --no-fund
+        if: steps.previous.outputs.has_previous == '1'
+      - run: npm run test:inference
+        if: steps.previous.outputs.has_previous == '1'
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - uses: actions/download-artifact@v4
+        if: steps.previous.outputs.has_previous == '1'
+        with:
+          name: signed-${{ matrix.os }}
+          path: upgrade-target
+      - uses: actions/download-artifact@v4
+        if: steps.previous.outputs.has_previous == '1'
+        with:
+          name: signed-${{ matrix.other_os }}
+          path: other-upgrade-target
+      - name: Upgrade the public installed version to these exact candidate bytes
+        if: steps.previous.outputs.has_previous == '1'
+        timeout-minutes: 8
+        run: npm run test:upgrade
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+          COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
+      - name: Record the public version used by native Windows qualification
+        if: runner.os == 'Windows' && steps.previous.outputs.has_previous == '1'
+        run: node -e "const fs=require('node:fs');const p=JSON.parse(fs.readFileSync('dist/upgrade-proof.json','utf8'));p.initialWindowsRelease=false;p.observedPublicTag=process.env.COMPANION_PREVIOUS_PUBLIC_TAG;fs.writeFileSync('dist/published-windows-proof.json',JSON.stringify(p,null,2)+'\n');"
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: published-upgrade-diagnostics-${{ runner.os }}-${{ runner.arch }}
+          include-hidden-files: true
+          retention-days: 3
+          path: .validation/upgrade-diagnostic.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: published-upgrade-proof-${{ matrix.os }}
+          retention-days: 7
+          path: ${{ runner.os == 'Windows' && 'dist/published-windows-proof.json' || 'dist/upgrade-proof.json' }}
+          if-no-files-found: error
   draft:
     if: github.event_name == 'push'
-    needs: [signed, upgrade]
+    needs: [signed, upgrade, published-upgrade, windows-upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: signed-*
-          merge-multiple: true
-          path: assets
       - name: Create a draft for native upgrade qualification
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "$GITHUB_REF_NAME" assets/* --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Signed build awaiting native two-version upgrade qualification. Publish only after completing docs/RELEASES.md."
+        run: gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "MatiQ Companion $GITHUB_REF_NAME" --notes "Native signed qualification completed. Populate this empty draft through Publish verified desktop installers; do not merge architecture artifact folders or publish unverified assets."

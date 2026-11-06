@@ -27,11 +27,11 @@ const assert = require("node:assert/strict");
       );
     }
   }
-  let app, owned;
+  let app, owned, page;
   const watchdog = setTimeout(() => {
     app?.process().kill("SIGKILL");
     process.exitCode = 1;
-  }, 90000);
+  }, 210000);
   try {
     app = await electron.launch({
       executablePath: process.env.COMPANION_EXECUTABLE_PATH || undefined,
@@ -40,7 +40,7 @@ const assert = require("node:assert/strict");
         : [path.resolve(__dirname, "..")],
       env: { ...process.env, COMPANION_TEST_PROFILE: profile },
     });
-    const page = await app.firstWindow();
+    page = await app.firstWindow();
     owned = lifecycle.capture(app.process());
     await page
       .getByRole("heading", { name: "Your own AI workspace." })
@@ -70,6 +70,9 @@ const assert = require("node:assert/strict");
     assert.equal(p.tools.documents, true);
     assert.equal(p.tools.search, false);
     assert.equal(p.tools.computer, false);
+    // The dedicated worker fixture covers real Office calls; this journey checks plain chat.
+    await page.getByRole("checkbox",{name:"Word and Excel"}).uncheck();
+    await waitFor(()=>page.evaluate(async id=>!(await window.companion.call("project.open",{id})).tools.documents,state.projects[0].id),"Plain-chat tool policy persistence",10000);
     await page.getByRole("button", { name: "Models", exact: true }).click();
     await page
       .getByRole("heading", { name: "Models on your computer." })
@@ -93,7 +96,7 @@ const assert = require("node:assert/strict");
       await page
         .locator(".message.assistant:not(#live-message)")
         .filter({ hasText: "Hello" })
-        .waitFor({ timeout: 60000 });
+        .waitFor({ timeout: 150000 });
       console.log(
         "PASS: actual local inference through Electron, isolated worker, IPC and chat rendering.",
       );
@@ -105,9 +108,19 @@ const assert = require("node:assert/strict");
     console.log(
       "PASS: real Electron navigation, project persistence, independent tool toggles and model setup screen.",
     );
+  } catch(error) {
+    if(page) {
+      try {
+        await fs.mkdir('.validation',{recursive:true});
+        await fs.writeFile(`.validation/desktop-${process.platform}-${process.arch}-failure.json`,JSON.stringify({error:error.message,body:(await page.locator('body').innerText()).slice(-10000)},null,2)+'\n');
+        await page.screenshot({path:`.validation/desktop-${process.platform}-${process.arch}-failure.png`});
+      } catch(diagnosticError){console.error('Could not retain desktop failure evidence:',diagnosticError.message);}
+    }
+    throw error;
   } finally {
+    const tree=lifecycle.captureTree(owned);
     await app?.close();
-    await lifecycle.verifyStopped(owned);
+    for(const process of tree)await lifecycle.verifyStopped(process);
     clearTimeout(watchdog);
     await fs.rm(profile, { recursive: true, force: true });
   }

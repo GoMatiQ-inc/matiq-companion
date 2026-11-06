@@ -68,7 +68,7 @@ function configureUpdates(app, emit, providedUpdater) {
     install: () => {
       if (state.status !== "downloaded")
         throw Error("Download the update first.");
-      updater.quitAndInstall(false, true);
+      updater.quitAndInstall(true, true);
     },
   };
 }

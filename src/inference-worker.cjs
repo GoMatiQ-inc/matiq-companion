@@ -1,7 +1,15 @@
-let api, llama, model, context, controller, loadedPath;
+let api, llama, model, context, controller, loadedPath, runtimePromise;
 const requests = new Map();
 let sequence = 0;
 const send = (value) => process.send?.(value);
+function initializeRuntime() {
+  if(!runtimePromise) runtimePromise=(async()=>{
+    send({type:"stage",stage:"initializing-runtime"});
+    api ||= await import("node-llama-cpp");
+    return api.getLlama({build:"never",logLevel:"error"});
+  })().catch(error=>{runtimePromise=null;throw error;});
+  return runtimePromise;
+}
 process.on("message", async (m) => {
   if (m.type === "tool-result") {
     const p = requests.get(m.id);
@@ -19,8 +27,7 @@ process.on("message", async (m) => {
   }
   if (m.type === "probe") {
     try {
-      api ||= await import("node-llama-cpp");
-      llama ||= await api.getLlama({ build: "never", logLevel: "error" });
+      llama = await initializeRuntime();
       send({
         type: "runtime",
         gpu: llama.gpu,
@@ -35,18 +42,20 @@ process.on("message", async (m) => {
   if (m.type !== "prompt") return;
   try {
     controller = new AbortController();
-    api ||= await import("node-llama-cpp");
-    llama ||= await api.getLlama({ build: "never", logLevel: "error" });
+    llama = await initializeRuntime();
     if (loadedPath !== m.modelPath) {
       loadedPath = null;
+      send({type:"stage",stage:"releasing-model"});
       await context?.dispose();
       context = null;
       await model?.dispose();
+      send({type:"stage",stage:"loading-model"});
       model = await llama.loadModel({ modelPath: m.modelPath });
       context = null;
       loadedPath = m.modelPath;
     }
     await context?.dispose();
+    send({type:"stage",stage:"creating-context"});
     context = await model.createContext({ contextSize: 4096 });
     send({
       type: "runtime",
@@ -90,6 +99,7 @@ process.on("message", async (m) => {
         },
       });
     }
+    send({type:"stage",stage:"generating-response"});
     const text = await session.prompt(m.text, {
       functions,
       signal: controller.signal,

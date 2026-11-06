@@ -14,7 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        include:
+          - { os: macos-latest, platform: darwin, arch: arm64 }
+          - { os: macos-15-intel, platform: darwin, arch: x64 }
+          - { os: windows-latest, platform: win32, arch: x64 }
+          - { os: windows-11-arm, platform: win32, arch: arm64 }
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     env:
@@ -23,8 +27,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
+      - name: Verify the native platform and architecture
+        run: node -e "const a=require('node:assert/strict');a.equal(process.platform,'${{ matrix.platform }}');a.equal(process.arch,'${{ matrix.arch }}');"
       - name: Reuse portable model weights; inference re-verifies their hash
         uses: actions/cache@v4
         with:
@@ -33,7 +39,32 @@ jobs:
           enableCrossOsArchive: true
       - run: npm ci
       - run: npm test
-      - run: npm run test:inference
+      - name: Parse the Windows distribution verifier
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors | Out-String) }
+      - run: npm run test:computer
+      - name: Verify repeated Windows model lifetimes
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        shell: pwsh
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+        run: |
+          for ($iteration=1; $iteration -le 5; $iteration++) {
+            Write-Host "Default mapped native model lifecycle $iteration of 5"
+            node scripts/inference-test.mjs
+            if ($LASTEXITCODE -ne 0) {
+              $originalExit=$LASTEXITCODE
+              $env:COMPANION_INFERENCE_DEBUG='1'
+              node scripts/inference-test.mjs
+              throw "Native model lifecycle failed with exit $originalExit. Diagnostic rerun does not replace the failure."
+            }
+          }
+      - run: node scripts/inference-test.mjs
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:tools
@@ -42,13 +73,19 @@ jobs:
       - run: npm run test:desktop
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - name: Inspect native Windows desktop session
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./scripts/inspect-windows-session.ps1
       - run: npm run package
       - run: npm run test:packaged
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: development-installer-${{ matrix.os }}
+          include-hidden-files: true
           retention-days: 3
           if-no-files-found: error
           path: |
@@ -57,3 +94,9 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/desktop-*-failure.*
+            .validation/worker-lifetimes-*.json
+            .validation/computer-*.json
+            .validation/computer-*.png
+            .validation/windows-session.json
+            .validation/desktop-preparation-*.json
