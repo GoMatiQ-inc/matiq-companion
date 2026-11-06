@@ -17,6 +17,7 @@ export async function prepareMacRelease(input, output, version) {
     assert.equal(proof.version,version); assert.equal(proof.arch,arch); assert.equal(proof.platform,'darwin');
     assert.equal(proof.artifact,pkg);
     for(const key of ['signed','notarized','stapled']) assert.equal(proof[key],true);
+    assert.equal(upgrade.installation,'system-pkg','Qualify the actual installed PKG upgrade path.');
     assert.equal(upgrade.arch,arch); assert.equal(upgrade.baseVersion,version);
     for(const key of ['signedDownloadRestart','automaticRelaunch']) assert.equal(upgrade[key],true);
     for(const key of ['project','settings','modelSha256','generatedFile']) assert.equal(upgrade.retained[key],true);
@@ -37,6 +38,7 @@ export async function prepareMacRelease(input, output, version) {
     metadata.push(yaml.load(await fs.readFile(path.join(directory,'latest-mac.yml'),'utf8')));
     if(arch==='arm64') {
       const previous=JSON.parse(await fs.readFile(path.join(input,'published-upgrade-proof.json'),'utf8'));
+      assert.equal(previous.installation,'system-pkg');
       assert.equal(previous.targetVersion,version); assert.equal(previous.targetZipSha256,proof.assets[zip]);
       assert.match(previous.baseVersion,/^\d+\.\d+\.\d+$/);
       assert.notEqual(previous.baseVersion,version);

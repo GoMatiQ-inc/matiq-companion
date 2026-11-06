@@ -7,7 +7,7 @@
 
 static napi_value Fail(napi_env env, const char* message) { napi_throw_error(env, nullptr, message); return nullptr; }
 static napi_value Done(napi_env env) { napi_value value; napi_get_undefined(env, &value); return value; }
-static bool Allowed(napi_env env) { if (AXIsProcessTrusted()) return true; Fail(env, "Enable Accessibility for MatiQ Companion in System Settings before input."); return false; }
+static bool Allowed(napi_env env) { if (AXIsProcessTrusted() && CGPreflightPostEventAccess()) return true; Fail(env, "Enable Accessibility for MatiQ Companion in System Settings before input."); return false; }
 static bool PostKey(CGKeyCode code, const UniChar* text = nullptr, size_t length = 0) {
   CGEventRef down = CGEventCreateKeyboardEvent(nullptr, code, true);
   CGEventRef up = CGEventCreateKeyboardEvent(nullptr, code, false);
@@ -59,7 +59,7 @@ static napi_value Click(napi_env env, napi_callback_info info) {
   CGEventRef down=CGEventCreateMouseEvent(nullptr,kCGEventLeftMouseDown,point,kCGMouseButtonLeft);
   CGEventRef up=CGEventCreateMouseEvent(nullptr,kCGEventLeftMouseUp,point,kCGMouseButtonLeft);
   if (!move || !down || !up) { if(move)CFRelease(move);if(down)CFRelease(down);if(up)CFRelease(up);return Fail(env,"macOS could not create pointer events."); }
-  for (auto event : {move,down,up}) { CGEventSetFlags(event,0);CGEventPost(kCGHIDEventTap,event);CFRelease(event); }
+  for (auto event : {move,down,up}) { CGEventSetFlags(event,0);CGEventSetIntegerValueField(event,kCGMouseEventClickState,1);CGEventPost(kCGHIDEventTap,event);CFRelease(event); }
   napi_value value;napi_create_int32(env,target,&value);return value;
 }
 static napi_value Foreground(napi_env env,napi_callback_info) {
@@ -81,8 +81,12 @@ static napi_value Focus(napi_env env,napi_callback_info info) {
   }
   return Done(env);
 }
+static napi_value Access(napi_env env,napi_callback_info){
+  napi_value result,ax,post;napi_create_object(env,&result);napi_get_boolean(env,AXIsProcessTrusted(),&ax);napi_get_boolean(env,CGPreflightPostEventAccess(),&post);napi_set_named_property(env,result,"accessibility",ax);napi_set_named_property(env,result,"postEvents",post);return result;
+}
+static napi_value RequestEvents(napi_env env,napi_callback_info){napi_value value;napi_get_boolean(env,CGRequestPostEventAccess(),&value);return value;}
 static napi_value Init(napi_env env,napi_value exports) {
-  napi_property_descriptor methods[]={ {"foreground",nullptr,Foreground,nullptr,nullptr,nullptr,napi_default,nullptr}, {"focus",nullptr,Focus,nullptr,nullptr,nullptr,napi_default,nullptr}, {"type",nullptr,Type,nullptr,nullptr,nullptr,napi_default,nullptr}, {"key",nullptr,Key,nullptr,nullptr,nullptr,napi_default,nullptr}, {"click",nullptr,Click,nullptr,nullptr,nullptr,napi_default,nullptr} };
-  napi_define_properties(env,exports,5,methods);return exports;
+  napi_property_descriptor methods[]={ {"access",nullptr,Access,nullptr,nullptr,nullptr,napi_default,nullptr}, {"requestEvents",nullptr,RequestEvents,nullptr,nullptr,nullptr,napi_default,nullptr}, {"foreground",nullptr,Foreground,nullptr,nullptr,nullptr,napi_default,nullptr}, {"focus",nullptr,Focus,nullptr,nullptr,nullptr,napi_default,nullptr}, {"type",nullptr,Type,nullptr,nullptr,nullptr,napi_default,nullptr}, {"key",nullptr,Key,nullptr,nullptr,nullptr,napi_default,nullptr}, {"click",nullptr,Click,nullptr,nullptr,nullptr,napi_default,nullptr} };
+  napi_define_properties(env,exports,7,methods);return exports;
 }
 NAPI_MODULE(companion_input,Init)

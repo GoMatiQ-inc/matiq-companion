@@ -37,3 +37,10 @@ current public release into the candidate bytes. The publisher requires all
 three proofs, verifies both original signature manifests, and creates one update
 feed containing both verified ZIP entries. Never merge artifact directories with
 identically named manifests or metadata before checking their contents.
+
+System-installed qualification uses the actual signed PKG under `/Applications`
+on a fresh disposable Mac CI VM and launches it as the normal user. Publication
+requires this proof on both architectures and for the previous public release
+upgrade. The harness refuses existing app/profile/receipt state, limits process
+cleanup to the owned bundle/cache, and removes only its installed app and receipt.
+A user-owned ZIP upgrade alone does not establish system-PKG update behavior.

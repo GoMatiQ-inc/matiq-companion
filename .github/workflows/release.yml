@@ -217,6 +217,7 @@ jobs:
         run: npm run test:upgrade
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+          COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
@@ -315,11 +316,12 @@ jobs:
           assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag)
           target=json.loads(pathlib.Path('package.json').read_text())['version']
           assert tuple(map(int,tag[1:].split('.')))<tuple(map(int,target.split('.')))
-          name=f'MatiQ-Companion-{tag[1:]}-mac-arm64.zip'
-          subprocess.run(['gh','release','download',tag,'--repo',repo,'--pattern',name,'--pattern','SHA256SUMS.txt','--dir','dist'],check=True)
+          names=[f'MatiQ-Companion-{tag[1:]}-mac-arm64.zip',f'MatiQ-Companion-{tag[1:]}-mac-arm64.pkg']
+          subprocess.run(['gh','release','download',tag,'--repo',repo,'--pattern',names[0],'--pattern',names[1],'--pattern','SHA256SUMS.txt','--dir','dist'],check=True)
           lines=(pathlib.Path('dist')/'SHA256SUMS.txt').read_text().splitlines()
-          expected=[line.split()[0] for line in lines if line.split()[-1]==name]
-          assert len(expected)==1 and hashlib.sha256((pathlib.Path('dist')/name).read_bytes()).hexdigest()==expected[0]
+          for name in names:
+              expected=[line.split()[0] for line in lines if line.split()[-1]==name]
+              assert len(expected)==1 and hashlib.sha256((pathlib.Path('dist')/name).read_bytes()).hexdigest()==expected[0]
           with open(os.environ['GITHUB_ENV'],'a') as env: env.write(f'COMPANION_UPGRADE_BASE_VERSION={tag[1:]}\nCOMPANION_UPGRADE_TARGET_VERSION={target}\n')
           PYTHON
       - name: Upgrade the public installed version to these exact candidate bytes
@@ -327,6 +329,7 @@ jobs:
         run: npm run test:upgrade
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+          COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
       - uses: actions/upload-artifact@v4
         if: failure()
         with:

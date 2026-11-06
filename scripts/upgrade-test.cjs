@@ -12,6 +12,7 @@ const lifecycle = require("./fixture-lifecycle.cjs");
 const { waitFor } = require("./wait-for.cjs");
 const { ModelStore, sharedRoot } = require("../src/models.cjs");
 const windows = process.platform === "win32";
+const systemInstall = !windows && process.env.COMPANION_UPGRADE_SYSTEM_INSTALL === "1";
 function powershell(script, env = {}) { return execFileSync("powershell.exe",["-NoProfile","-NonInteractive","-Command",script],{encoding:"utf8",timeout:15000,env:{...process.env,...env}}).trim(); }
 const { MODELS } = require("../src/catalog.cjs");
 const baseVersion = process.env.COMPANION_UPGRADE_BASE_VERSION || require("../package.json").version;
@@ -98,7 +99,14 @@ async function bundleVersion(apps) {
   const modelRoot = sharedRoot();
   const updaterCache = path.join(windows ? process.env.LOCALAPPDATA : path.join(os.homedir(),"Library","Caches"),"matiq-companion-updater");
   const shipIt = windows ? path.join(process.env.LOCALAPPDATA,'matiq-companion-updater') : path.join(os.homedir(),'Library','Caches','com.matiq.companion.ShipIt');
-  const apps = path.join(directory, "apps");
+  const apps = systemInstall ? "/Applications" : path.join(directory, "apps");
+  const ownedApplication = windows ? apps : path.join(apps,"MatiQ Companion.app");
+  if(systemInstall) {
+    try {await fs.lstat(ownedApplication);throw Error("Refusing to adopt an existing system-installed Companion app.");}catch(error){if(error.code!=="ENOENT")throw error;}
+    const {spawnSync}=require("node:child_process");
+    const receipt=spawnSync("/usr/sbin/pkgutil",["--pkg-info","com.matiq.companion"],{encoding:"utf8",timeout:15000});
+    assert.equal(receipt.status,1,"Refusing to adopt an existing Companion installer receipt.");
+  }
   let existingShipIt = false;
   try {
     await fs.lstat(shipIt);
@@ -121,7 +129,7 @@ async function bundleVersion(apps) {
       if (error.code !== "ENOENT") throw error;
     }
   }
-  await fs.mkdir(apps);
+  if(!systemInstall) await fs.mkdir(apps);
   await fs.mkdir(profile, { recursive: true });
   await fs.mkdir(modelRoot, { recursive: true });
   await fs.mkdir(updaterCache, { recursive: true });
@@ -137,7 +145,11 @@ async function bundleVersion(apps) {
       mode: 0o600,
     });
   if(windows) execFileSync(baseZip,['/S','/D='+apps],{timeout:120000});
-  else execFileSync("/usr/bin/ditto", ["-x", "-k", baseZip, apps], {timeout:120000});
+  else if(systemInstall) {
+    const pkg=path.join(root,"dist",`MatiQ-Companion-${baseVersion}-mac-${process.arch}.pkg`);
+    execFileSync("/usr/bin/sudo",["-n","/usr/sbin/installer","-pkg",pkg,"-target","/"],{timeout:120000});
+    assert.equal((await fs.stat(ownedApplication)).uid,0,"Qualify the real root-owned PKG installation.");
+  } else execFileSync("/usr/bin/ditto", ["-x", "-k", baseZip, apps], {timeout:120000});
   const executable = path.join(
     apps,
     windows ? "MatiQ Companion.exe" : "MatiQ Companion.app/Contents/MacOS/MatiQ Companion",
@@ -218,7 +230,7 @@ async function bundleVersion(apps) {
     port,
     successful = false;
   const watchdog = setTimeout(() => {
-    for (const process of [...processesIn(apps), ...processesIn(shipIt)])
+    for (const process of [...processesIn(ownedApplication), ...processesIn(shipIt)])
       try {
         global.process.kill(process.pid, "SIGKILL");
       } catch (error) {
@@ -323,7 +335,7 @@ async function bundleVersion(apps) {
       .click();
     const launch = await waitFor(async () => {
       if ((await bundleVersion(apps)) !== targetVersion) return false;
-      const processInfo = processesIn(apps).find(
+      const processInfo = processesIn(ownedApplication).find(
         (info) =>
           info.executable === realpathSync(executable) &&
           info.pid !== handle.pid,
@@ -353,6 +365,7 @@ async function bundleVersion(apps) {
     assert.equal(await fs.readFile(generated, "utf8"), marker);
     const proof = {
       platform: process.platform,
+      installation:systemInstall?"system-pkg":windows?"per-user-nsis":"user-owned-zip",
       arch: process.arch,
       baseVersion,
       targetVersion,
@@ -390,7 +403,7 @@ async function bundleVersion(apps) {
       runtimeLog,
       originalProcess: handle ? { pid: handle.pid, exitCode: handle.exitCode, signalCode: handle.signalCode } : null,
       installedVersion: await bundleVersion(apps),
-      processes: [...processesIn(apps), ...processesIn(shipIt)],
+      processes: [...processesIn(ownedApplication), ...processesIn(shipIt)],
       logs: {},
     };
     for (const name of ["ShipIt_stderr.log", "ShipIt_stdout.log"]) {
@@ -410,7 +423,7 @@ async function bundleVersion(apps) {
     console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
     if (handle && handle.exitCode === null && handle.signalCode === null)
       await app.close();
-    const remaining = [...processesIn(apps), ...processesIn(shipIt)].map(
+    const remaining = [...processesIn(ownedApplication), ...processesIn(shipIt)].map(
       (process) => lifecycle.capture({ pid: process.pid }),
     );
     for (const snapshot of remaining) {
@@ -436,7 +449,7 @@ async function bundleVersion(apps) {
         );
       });
     assert.equal(
-      [...processesIn(apps), ...processesIn(shipIt)].length,
+      [...processesIn(ownedApplication), ...processesIn(shipIt)].length,
       0,
       "Owned updater processes remain.",
     );
@@ -448,11 +461,18 @@ async function bundleVersion(apps) {
       );
       await fs.rm(owned, { recursive: true });
     }
+    if(systemInstall) {
+      try {
+        const stat=await fs.lstat(ownedApplication);assert.equal(stat.isSymbolicLink(),false,"Inspect the changed installed-app path before cleanup.");
+        execFileSync("/usr/bin/sudo",["-n","/bin/rm","-r",ownedApplication],{timeout:60000});
+      } catch(error){if(error.code!=="ENOENT")throw error;}
+      execFileSync("/usr/bin/sudo",["-n","/usr/sbin/pkgutil","--forget","com.matiq.companion"],{timeout:15000});
+    }
     if(windows) {
       const uninstaller=path.join(apps,'Uninstall MatiQ Companion.exe');
       await fs.access(uninstaller);
       execFileSync(uninstaller,['/S','_?='+apps],{timeout:60000});
-      assert.equal(processesIn(apps).length,0,'The owned uninstaller process remains.');
+      assert.equal(processesIn(ownedApplication).length,0,'The owned uninstaller process remains.');
     }
     if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });

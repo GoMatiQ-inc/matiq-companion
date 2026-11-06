@@ -18,6 +18,8 @@ const {execFileSync}=require('node:child_process');
       globalThis.__computer=process.mainModule.require(app.getAppPath()+'/src/computer.cjs').createComputer(BrowserWindow.getAllWindows()[0]);
     });
     const act=(name,args={})=>app.evaluate(async(_,{name,args})=>globalThis.__computer(name,args,new AbortController().signal),{name,args});
+    const initialAccess=await app.evaluate(({app})=>process.mainModule.require(app.getAppPath()+'/src/computer-access.cjs').computerAccess());
+    await fs.mkdir('.validation',{recursive:true});await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-access.json`),JSON.stringify(initialAccess,null,2)+'\n');
     const desktopPreparation={attempted:false,togglesDisabled:0,pages:0};
     if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64') {
       let setup=await act('observe_screen');
@@ -35,9 +37,8 @@ const {execFileSync}=require('node:child_process');
           assert.equal(changed.words.filter(w=>/^yes$/i.test(w.text)).length,yes.length-1,'The optional CI privacy switch did not turn off. Inspect before continuing.');
           desktopPreparation.togglesDisabled++;setup=changed;
         } else {
-          assert.ok(setup.words.some(w=>/^no$/i.test(w.text)),'Inspect unfamiliar privacy options before accepting the CI setup page.');
-          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text));
-          assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing.');
+          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text)) || (desktopPreparation.pages===0 && desktopPreparation.togglesDisabled===2 ? {x:867,y:656} : null);
+          assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing: '+JSON.stringify(setup.words.map(w=>w.text)));
           await act('click_screen',{x:next.x,y:next.y});desktopPreparation.pages++;
           setup=await act('observe_screen');
         }
@@ -86,7 +87,11 @@ const {execFileSync}=require('node:child_process');
       await act('click_screen',{x:again.x,y:again.y});focusClicks++;
     }
     const focus=await page.evaluate(()=>({element:document.activeElement.id,mouse:window.trustedMouse}));
-    assert.equal(focus.element,'target','Native pointer click must focus the other process input: '+JSON.stringify(focus));
+    if(focus.element!=='target') {
+      const pointer=await app.evaluate(({screen})=>screen.getCursorScreenPoint());
+      const bounds=await target.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].getContentBounds());
+      throw Error('Native pointer did not focus the other process: '+JSON.stringify({focus,pointer,label,bounds,initialAccess,appPid:app.process().pid,targetPid:target.process().pid}));
+    }
     await assert.rejects(act('type_text',{text:'must not type'}),/Observe the screen again/);
     await act('observe_screen');
     await act('type_text',{text:process.platform==='linux'?'Local input verified!':'Local input verified café!'});

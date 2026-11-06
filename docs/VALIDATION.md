@@ -120,3 +120,10 @@ still gates keyboard dispatch. Screen OCR uses sparse-text segmentation and
 upsizes small captures, because the ARM first-run Yes/No labels were being
 misread before any settings change. The speculative software-renderer workaround
 was removed. These changes require the normal native and packaged checks.
+
+Mac access now checks Core Graphics event-posting permission as well as
+Accessibility, and the user-requested permission flow requests both through
+normal OS APIs. Native tests retain these separate values and real pointer
+geometry on failure. The ARM fixture's inspected first page reached all three
+No states; its fixed Next button can be used only after both initially enabled
+switches have been verified off in that exact first-page layout.

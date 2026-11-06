@@ -1,7 +1,8 @@
 const { systemPreferences, desktopCapturer, shell } = require("electron");
 function computerAccess() {
+  const native=process.platform === "darwin" ? require("./native/mac-computer.node").access() : null;
   return process.platform === "darwin"
-    ? { screen: systemPreferences.getMediaAccessStatus("screen"), input: systemPreferences.isTrustedAccessibilityClient(false) ? "granted" : "not-granted" }
+    ? { screen: systemPreferences.getMediaAccessStatus("screen"), input: native.accessibility && native.postEvents ? "granted" : "not-granted", postEvents:native.postEvents, accessibility:native.accessibility }
     : { screen: "available", input: "available" };
 }
 async function requestComputerAccess(kind) {
@@ -11,6 +12,7 @@ async function requestComputerAccess(kind) {
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
   } else if (kind === "input") {
     systemPreferences.isTrustedAccessibilityClient(true);
+    require("./native/mac-computer.node").requestEvents();
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility");
   } else throw Error("Choose Screen Recording or Accessibility access.");
   return computerAccess();

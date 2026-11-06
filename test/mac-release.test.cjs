@@ -13,7 +13,7 @@ test('Mac publication combines qualified architectures and refuses altered insta
   const assets={};for(const [name,body] of Object.entries(data)){await fs.writeFile(path.join(dir,name),body);assets[name]=createHash('sha256').update(body).digest('hex');}
   await fs.writeFile(path.join(dir,'mac-signature.json'),JSON.stringify({version:'0.1.1',arch,platform:'darwin',artifact:pkg,signed:true,notarized:true,stapled:true,assets,sha256:assets[pkg]}));
   const retained={project:true,settings:true,modelSha256:true,generatedFile:true};
-  const proof={arch,baseVersion:'0.1.1',signedDownloadRestart:true,automaticRelaunch:true,retained,baseZipSha256:assets[zip]};
+  const proof={arch,installation:'system-pkg',baseVersion:'0.1.1',signedDownloadRestart:true,automaticRelaunch:true,retained,baseZipSha256:assets[zip]};
   await fs.writeFile(path.join(dir,'upgrade-proof.json'),JSON.stringify(proof));
   if(arch==='arm64')await fs.writeFile(path.join(input,'published-upgrade-proof.json'),JSON.stringify({...proof,baseVersion:'0.1.0',targetVersion:'0.1.1',targetZipSha256:assets[zip]}));
  }
