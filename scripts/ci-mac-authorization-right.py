@@ -27,8 +27,8 @@ def authorize(password=None):
     environment = None
     if password is not None:
         user_buffer, password_buffer = c.create_string_buffer(name.encode()), c.create_string_buffer(password.encode())
-        values = (Item * 2)(Item(b"username", len(name), c.cast(user_buffer, c.c_void_p), 0), Item(b"password", len(password), c.cast(password_buffer, c.c_void_p), 0))
-        environment = Items(2, values)
+        values = (Item * 3)(Item(b"username", len(name), c.cast(user_buffer, c.c_void_p), 0), Item(b"password", len(password), c.cast(password_buffer, c.c_void_p), 0), Item(b"shared", 0, None, 0))
+        environment = Items(3, values)
     status = security.AuthorizationCreate(c.byref(rights), c.byref(environment) if environment else None, 2, c.byref(ref))
     return status, ref
 
