@@ -296,16 +296,13 @@ async function bundleVersion(apps) {
       file: await hash(generated),
     };
     await fs.mkdir(path.join(profile, "update-cache"));
-    await app.evaluate(({ app }, url) => {
-      app.setPath(
-        "cache",
-        require("node:path").join(app.getPath("userData"), "update-cache"),
-      );
+    await app.evaluate(({ app }, { cache, url }) => {
+      app.setPath("cache", cache);
       const updater =
         process.mainModule.require("electron-updater").autoUpdater;
       updater.setFeedURL({ provider: "generic", url });
       updater.disableDifferentialDownload = true;
-    }, `http://127.0.0.1:${port}/`);
+    }, { cache: path.join(profile, "update-cache"), url: `http://127.0.0.1:${port}/` });
     await page.getByRole("button", { name: "Settings", exact: true }).click();
     await page
       .getByRole("button", { name: "Check for updates", exact: true })
