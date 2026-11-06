@@ -309,13 +309,23 @@ function render() {
       check.type = "checkbox";
       check.checked = project.tools[id];
       check.setAttribute("aria-label", title);
+      const projectId = project.id;
       check.onchange = run(async () => {
-        project = await call("project.policy", {
-          id: project.id,
-          tool: id,
-          enabled: check.checked,
-        });
-        render();
+        const enabled = check.checked;
+        check.disabled = true;
+        try {
+          const updated = await call("project.policy", {
+            id: projectId,
+            tool: id,
+            enabled,
+          });
+          if (project?.id === projectId) project = updated;
+        } catch (error) {
+          check.checked = !enabled;
+          throw error;
+        } finally {
+          check.disabled = false;
+        }
       });
       const words = el("span");
       words.append(el("strong", title), el("small", note));
