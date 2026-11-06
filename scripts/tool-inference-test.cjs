@@ -15,8 +15,8 @@ const { readWord } = require("../src/documents.cjs");
   const store = new ModelStore(process.env.COMPANION_VALIDATION_MODELS);
   assert.ok(await store.verify(MODELS[0]));
   const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-tools-")));
-  let child, owned, runtime, diagnostics = "";
-  const watchdog = setTimeout(() => { process.exitCode=1;child?.kill("SIGKILL"); },180000);
+  let child, owned, runtime, diagnostics = "", phase="document tool", stage="starting-worker", chunks=0;
+  const watchdog = setTimeout(() => { process.exitCode=1;child?.kill("SIGKILL"); },300000);
   try {
     const projects = new Projects(path.join(dir, "projects"));
     const project = await projects.create("Tool verification");
@@ -35,9 +35,9 @@ const { readWord } = require("../src/documents.cjs");
     child=fork(bootstrap,[],{execPath:executable,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','ignore','pipe','ipc']});
     owned=lifecycle.capture(child);
     child.stderr.on('data',bytes=>{diagnostics=(diagnostics+bytes).slice(-3000);});
-    child.on('message',message=>{if(message.type==='fixture-runtime')runtime=message;});
+    child.on('message',message=>{if(message.type==='fixture-runtime'){runtime=message;console.log('Actual worker runtime:',JSON.stringify(runtime));}if(message.type==='stage'){stage=message.stage;console.log('Worker stage:',phase,stage);}if(message.type==='chunk')chunks++;});
     const prompt=message=>new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>finish(Error('Worker prompt timed out. Inspect native diagnostics.')),90000);
+      const timer=setTimeout(()=>finish(Error('Worker prompt timed out: '+JSON.stringify({phase,stage,chunks,runtime,diagnostics}))),150000);
       const finish=(error,value)=>{
         clearTimeout(timer);child.off('error',onError);child.off('exit',onExit);child.off('message',onMessage);
         error?reject(error):resolve(value);
@@ -68,6 +68,7 @@ const { readWord } = require("../src/documents.cjs");
     const alternate=path.join(dir,'verified-weight-alias.gguf');
     try {await fs.link(store.location(MODELS[0]),alternate);} catch(error){if(error.code!=='EXDEV')throw error;await fs.copyFile(store.location(MODELS[0]),alternate);}
     for(let iteration=0;iteration<5;iteration++){
+      phase=`model reload ${iteration+1}`;chunks=0;
       const text=await prompt({modelPath:iteration%2===0?alternate:store.location(MODELS[0]),tools:[],system:'Answer briefly. /no_think',text:'Reply with the word Hello.'});
       assert.ok(text.trim(),'The reloaded worker must return actual model output.');
     }

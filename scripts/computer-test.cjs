@@ -107,6 +107,7 @@ const {execFileSync}=require('node:child_process');
     await assert.rejects(act('type_text',{text:'must not type'}),/Observe the screen again/);
     await act('observe_screen');
     await act('type_text',{text:process.platform==='linux'?'Local input verified!':'Local input verified café!'});
+    assert.equal(await target.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows()[0].isFocused()),true,'Keep the approved target focused after queued typing.');
     await act('observe_screen');
     await act('press_key',{key:'Backspace'});
     await act('observe_screen');

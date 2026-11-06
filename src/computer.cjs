@@ -1,4 +1,4 @@
-const { app, desktopCapturer, screen } = require("electron");
+const { desktopCapturer, screen } = require("electron");
 const { createWorker } = require("tesseract.js");
 const language = require("@tesseract.js-data/eng");
 const { computerAccess } = require("./computer-access.cjs");
@@ -16,7 +16,6 @@ function createComputer(window) {
       await require("./mac-computer.cjs").activateTarget(macTarget,signal);
     }
     window.hide();
-    if(process.platform === "darwin") app.hide();
     try {
       await new Promise((r) => setTimeout(r, 350));
       if (signal?.aborted) throw Error("Task stopped.");
@@ -141,9 +140,8 @@ function createComputer(window) {
         note: "Input dispatched. Observe again to verify the outcome; success in the target application is not implied.",
       };
     } finally {
-      if(process.platform === "darwin") {app.show();app.focus({steal:true});}
-      window.show();
-      window.focus();
+      // Keep queued native input directed at the approved application.
+      window.showInactive();
     }
   };
 }

@@ -35,18 +35,22 @@ process.on("message", async (m) => {
   if (m.type !== "prompt") return;
   try {
     controller = new AbortController();
+    send({type:"stage",stage:"initializing-runtime"});
     api ||= await import("node-llama-cpp");
     llama ||= await api.getLlama({ build: "never", logLevel: "error" });
     if (loadedPath !== m.modelPath) {
       loadedPath = null;
+      send({type:"stage",stage:"releasing-model"});
       await context?.dispose();
       context = null;
       await model?.dispose();
+      send({type:"stage",stage:"loading-model"});
       model = await llama.loadModel({ modelPath: m.modelPath });
       context = null;
       loadedPath = m.modelPath;
     }
     await context?.dispose();
+    send({type:"stage",stage:"creating-context"});
     context = await model.createContext({ contextSize: 4096 });
     send({
       type: "runtime",
@@ -90,6 +94,7 @@ process.on("message", async (m) => {
         },
       });
     }
+    send({type:"stage",stage:"generating-response"});
     const text = await session.prompt(m.text, {
       functions,
       signal: controller.signal,
