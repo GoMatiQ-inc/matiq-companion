@@ -437,6 +437,7 @@ async function bundleVersion(apps) {
       try {
         diagnostic.nativeSystemLog=execFileSync('/usr/bin/log',['show','--last','4m','--style','compact','--predicate','process == "ShipIt" OR process == "SecurityAgent" OR subsystem BEGINSWITH "com.github.Squirrel"'],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024}).slice(-20000);
         diagnostic.updaterJobs=execFileSync('/bin/launchctl',['list'],{encoding:'utf8',timeout:10000}).split('\n').filter(line=>/ShipIt|companion/i.test(line));
+        diagnostic.authorizationElements=execFileSync('/usr/bin/osascript',['-e','tell application "System Events" to tell process "SecurityAgent" to get entire contents of window 1'],{encoding:'utf8',timeout:10000,maxBuffer:128*1024}).slice(-10000);
       } catch(error) {diagnostic.nativeLogError=error.message;console.error('Upgrade native-log diagnostic:',error.message);}
     }
     for (const name of ["ShipIt_stderr.log", "ShipIt_stdout.log"]) {
