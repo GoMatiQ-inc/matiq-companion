@@ -4,13 +4,13 @@ A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Down
 
 ## Current status
 
-[MatiQ Companion v0.1.0](https://github.com/GoMatiQ-inc/matiq-companion/releases/tag/v0.1.0) includes a signed, notarized Apple Silicon Mac installer. Actual signed download/restart and project/model preservation passed. Windows x64 passes native build and packaged-inference CI; signed Windows distribution is awaiting Microsoft company identity validation and a certificate profile. Computer use remains experimental and needs native privacy/input qualification.
+Native development and packaged checks pass on Apple Silicon, Intel Mac, Windows x64 and Windows ARM64, including real local inference, documents and separate-application computer input. Public installers and exact signed-update qualification are listed on the [current release](https://github.com/GoMatiQ-inc/matiq-companion/releases/latest) and in the [validation record](docs/VALIDATION.md). Signed Windows distribution awaits Microsoft company identity validation and an issued certificate profile. Computer use requires explicit project enablement, individual approvals and normal OS privacy permissions.
 
-## Install on an Apple Silicon Mac
+## Install on a Mac
 
-Download [MatiQ-Companion-0.1.0-mac-arm64.pkg](https://github.com/GoMatiQ-inc/matiq-companion/releases/download/v0.1.0/MatiQ-Companion-0.1.0-mac-arm64.pkg), open the installer and follow macOS prompts. Download a verified local model during setup; model weights are separate from the installer. Intel Macs are not qualified by this release.
+Open the [current release](https://github.com/GoMatiQ-inc/matiq-companion/releases/latest), check its qualified architectures, and download the matching **mac-arm64.pkg** for Apple Silicon or **mac-x64.pkg** for Intel when offered. Follow macOS installer prompts. Download a verified local model during setup; model weights are separate from the installer. An architecture is available only when its installer is included in that release.
 
-For later releases, use **Settings → Check for updates → Download update → Restart to update**. Restart becomes available after the download completes. See the release's checksums and [validation record](docs/VALIDATION.md) for exact scope.
+For later releases, use **Settings → Check for updates → Download update → Restart to update**. Restart becomes available after the download completes. See the release's checksums and validation record for exact scope.
 
 ## Features
 

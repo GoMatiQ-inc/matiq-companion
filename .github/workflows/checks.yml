@@ -31,6 +31,12 @@ jobs:
           cache: npm
       - name: Verify the native platform and architecture
         run: node -e "const a=require('node:assert/strict');a.equal(process.platform,'${{ matrix.platform }}');a.equal(process.arch,'${{ matrix.arch }}');"
+      - name: Qualify the scoped Intel Apple-ticket transport
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py setup
+      - name: Verify original Intel firewall state is restored
+        if: always() && runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py cleanup
       - name: Reuse portable model weights; inference re-verifies their hash
         uses: actions/cache@v4
         with:

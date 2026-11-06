@@ -30,6 +30,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      # actions/runner-images#14924: HTTP/3 drops Apple ticket requests on Intel.
+      - name: Use TLS over TCP for Apple tickets on the disposable Intel runner
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py setup
       - name: Require source merged into main and matching version tag
         shell: bash
         run: |
@@ -180,6 +184,9 @@ jobs:
             dist/latest.yml
             dist/*.blockmap
             dist/*-signature.json
+      - name: Remove and verify the owned Intel ticket transport rule
+        if: always() && runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py cleanup
   upgrade:
     needs: signed
     if: inputs.platform != 'windows'
@@ -191,6 +198,10 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
+      # actions/runner-images#14924: HTTP/3 drops Apple ticket requests on Intel.
+      - name: Use TLS over TCP for Apple tickets on the disposable Intel runner
+        if: runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py setup
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -235,6 +246,9 @@ jobs:
           retention-days: 7
           if-no-files-found: error
           path: dist/upgrade-proof.json
+      - name: Remove and verify the owned Intel ticket transport rule
+        if: always() && runner.os == 'macOS' && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py cleanup
   windows-upgrade:
     needs: signed
     if: inputs.platform != 'mac'
