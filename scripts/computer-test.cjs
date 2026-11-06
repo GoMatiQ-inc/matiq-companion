@@ -69,7 +69,16 @@ const {execFileSync}=require('node:child_process');
     const page=await target.firstWindow();
     await page.getByText('Companion computer verification',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
-    const observed=await act('observe_screen');
+    let observed=await act('observe_screen');
+    if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64') {
+      const startMenu=words=>words.some(w=>/^Pinned$/i.test(w.text)) && words.some(w=>/^Recommended$/i.test(w.text));
+      if(startMenu(observed.words)) {
+        await act('press_key',{key:'Escape'});
+        observed=await act('observe_screen');
+        assert.equal(startMenu(observed.words),false,'The inspected CI Start menu did not close. Inspect before continuing.');
+        desktopPreparation.startMenuDismissed=true;
+      }
+    }
     const label=observed.words.find(w=>/^inputfield$/i.test(w.text));
     if(!label) {
       if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64' && /Choose privacy settings/i.test(observed.text)) {
