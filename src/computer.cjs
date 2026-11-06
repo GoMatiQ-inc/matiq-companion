@@ -3,7 +3,7 @@ const { createWorker } = require("tesseract.js");
 const language = require("@tesseract.js-data/eng");
 const { computerAccess } = require("./computer-access.cjs");
 function createComputer(window) {
-  let observation = null;
+  let observation = null, focusWindow = null;
   return async (name, args, signal) => {
     if (signal?.aborted) throw Error("Task stopped.");
     const access = computerAccess();
@@ -17,6 +17,8 @@ function createComputer(window) {
       if (signal?.aborted) throw Error("Task stopped.");
       const display = screen.getPrimaryDisplay();
       if (name === "observe_screen") {
+        observation = null;
+        focusWindow = process.platform === "win32" ? require("./windows-computer.cjs").foregroundWindow() : null;
         const sources = await desktopCapturer.getSources({
           types: ["screen"],
           thumbnailSize: {
@@ -104,7 +106,7 @@ function createComputer(window) {
       } else if (!["click_screen", "type_text", "press_key"].includes(name)) throw Error("Unknown computer action.");
       observation = null;
       if (process.platform === "win32") {
-        await require("./windows-computer.cjs").windowsInput(name, args, display, signal);
+        await require("./windows-computer.cjs").windowsInput(name, args, display, signal, focusWindow);
       } else if (process.platform === "darwin") {
         await require("./mac-computer.cjs").macInput(name, args, display, signal);
       } else {

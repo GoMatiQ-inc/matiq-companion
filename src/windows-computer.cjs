@@ -1,30 +1,24 @@
-const { spawn } = require("node:child_process");
-const { readFileSync } = require("node:fs");
-const path = require("node:path");
-function windowsInput(action, args, display, signal) {
-  const payload = { ...args, action };
-  if (action === "click_screen") {
-    payload.x = Math.round((display.bounds.x + args.x) * display.scaleFactor);
-    payload.y = Math.round((display.bounds.y + args.y) * display.scaleFactor);
+const native = () => require("./native/windows-computer.node");
+function foregroundWindow() { return native().foreground(); }
+async function windowsInput(action, args, display, signal, target) {
+  if (signal?.aborted) throw Error("Task stopped.");
+  const input = native();
+  if (action === "click_screen") return input.click((display.bounds.x + args.x) * display.scaleFactor, (display.bounds.y + args.y) * display.scaleFactor);
+  input.focus(target);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  if (signal?.aborted) throw Error("Task stopped.");
+  if (action === "press_key") {
+    const keys = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, Left: 37, Up: 38, Right: 39, Down: 40 };
+    if (!Object.hasOwn(keys, args.key)) throw Error("Choose a supported key.");
+    return input.key(keys[args.key]);
   }
-  // Only this bundled program is executable. Model text is JSON on stdin, never PowerShell code.
-  const program = readFileSync(path.join(__dirname, "native/windows-computer.ps1"), "utf8");
-  const executable = path.join(process.env.SystemRoot, "System32/WindowsPowerShell/v1.0/powershell.exe");
-  return new Promise((resolve, reject) => {
-    const child = spawn(executable, ["-NoProfile", "-NonInteractive", "-OutputFormat", "Text", "-EncodedCommand", Buffer.from(program, "utf16le").toString("base64")], { windowsHide: true, signal });
-    let stdout = "", stderr = "";
-    const timer = setTimeout(() => child.kill(), 15000);
-    child.stdout.on("data", (chunk) => { stdout = (stdout + chunk).slice(-4000); });
-    child.stderr.on("data", (chunk) => { stderr = (stderr + chunk).slice(-4000); });
-    child.on("error", (error) => { clearTimeout(timer); reject(error); });
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (code !== 0) return reject(Error("Windows input failed: " + (stderr.trim() || "the native helper stopped")));
-      try { if (JSON.parse(stdout).dispatched !== true) throw Error("Native input was not acknowledged."); resolve(); }
-      catch (error) { reject(error); }
-    });
-    child.stdin.on("error", (error) => { if (error.code !== "EPIPE") reject(error); });
-    child.stdin.end(JSON.stringify(payload));
-  });
+  let chunk = "";
+  for (const character of args.text) {
+    if (signal?.aborted) throw Error("Task stopped.");
+    if (chunk.length + character.length > 16) { input.type(chunk); await new Promise((resolve) => setTimeout(resolve, 5)); chunk = ""; }
+    chunk += character;
+  }
+  if (signal?.aborted) throw Error("Task stopped.");
+  if (chunk) input.type(chunk);
 }
-module.exports = { windowsInput };
+module.exports = { windowsInput, foregroundWindow };
