@@ -6,9 +6,11 @@ import path from "node:path";
 import os from "node:os";
 import { verifyUpdateAssets } from "./verify-update-assets.mjs";
 const root = path.resolve(import.meta.dirname, "..");
-const { version } = JSON.parse(
+const metadata = JSON.parse(
   await readFile(path.join(root, "package.json"), "utf8"),
 );
+const version = process.env.COMPANION_RELEASE_VERSION || metadata.version;
+const output = process.env.COMPANION_RELEASE_OUTPUT || "dist";
 if (process.platform !== "darwin")
   throw new Error("Verify Mac signatures on macOS.");
 const team = process.env.APPLE_TEAM_ID;
@@ -19,12 +21,12 @@ assert.match(
 );
 const app = path.join(
   root,
-  "dist",
+  output,
   process.arch === "arm64" ? "mac-arm64" : "mac",
   "MatiQ Companion.app",
 );
 const artifact = `MatiQ-Companion-${version}-mac-${process.arch}.pkg`,
-  pkg = path.join(root, "dist", artifact);
+  pkg = path.join(root, output, artifact);
 function run(command, args) {
   const result = spawnSync(command, args, {
     encoding: "utf8",
@@ -65,7 +67,7 @@ run("/usr/bin/xcrun", ["stapler", "validate", pkg]);
 run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", app]);
 run("/usr/sbin/spctl", ["--assess", "--type", "install", "--verbose=4", pkg]);
 const zipName = `MatiQ-Companion-${version}-mac-${process.arch}.zip`;
-const folder = path.join(root, "dist");
+const folder = path.join(root, output);
 await verifyUpdateAssets(folder, version, "darwin");
 const extracted = await mkdtemp(
   path.join(os.tmpdir(), "matiq-update-signature-"),

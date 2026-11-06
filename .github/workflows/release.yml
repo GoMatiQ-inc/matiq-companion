@@ -92,6 +92,40 @@ jobs:
       - run: npm run test:packaged
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - name: Choose the next patch version for signed upgrade qualification
+        if: runner.os == 'macOS'
+        id: next
+        shell: bash
+        run: echo "version=$(node -p "require('./package.json').version.split('.').map((n,i)=>Number(n)+(i===2?1:0)).join('.')")" >> "$GITHUB_OUTPUT"
+      - name: Build a signed newer version for the actual upgrade test
+        if: runner.os == 'macOS'
+        run: npm run package:release
+        env:
+          COMPANION_RELEASE_VERSION: ${{ steps.next.outputs.version }}
+          COMPANION_RELEASE_OUTPUT: upgrade-target
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          CSC_NAME: ${{ secrets.CSC_NAME }}
+          CSC_INSTALLER_LINK: ${{ secrets.CSC_INSTALLER_LINK }}
+          CSC_INSTALLER_KEY_PASSWORD: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
+          CSC_INSTALLER_NAME: ${{ secrets.CSC_INSTALLER_NAME }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+      - name: Verify the newer signed application and update ZIP
+        if: runner.os == 'macOS'
+        run: npm run test:signatures
+        env:
+          COMPANION_RELEASE_VERSION: ${{ steps.next.outputs.version }}
+          COMPANION_RELEASE_OUTPUT: upgrade-target
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_INSTALLER_NAME: ${{ secrets.CSC_INSTALLER_NAME }}
+      - name: Qualify real signed download, restart and retained projects/models
+        if: runner.os == 'macOS'
+        timeout-minutes: 8
+        run: npm run test:upgrade
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - uses: actions/upload-artifact@v4
         with:
           name: signed-${{ matrix.os }}
@@ -104,6 +138,7 @@ jobs:
             dist/*.yml
             dist/*.blockmap
             dist/*-signature.json
+            dist/upgrade-proof.json
   draft:
     if: github.event_name == 'push'
     needs: signed
