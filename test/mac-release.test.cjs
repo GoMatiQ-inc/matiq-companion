@@ -13,7 +13,7 @@ test('Mac publication combines qualified architectures and refuses altered insta
   const assets={};for(const [name,body] of Object.entries(data)){await fs.writeFile(path.join(dir,name),body);assets[name]=createHash('sha256').update(body).digest('hex');}
   await fs.writeFile(path.join(dir,'mac-signature.json'),JSON.stringify({version:'0.1.1',arch,platform:'darwin',artifact:pkg,signed:true,notarized:true,stapled:true,assets,sha256:assets[pkg]}));
   const retained={project:true,settings:true,modelSha256:true,generatedFile:true};
-  const proof={arch,installation:'system-pkg',baseVersion:'0.1.1',signedDownloadRestart:true,automaticRelaunch:true,retained,baseZipSha256:assets[zip]};
+  const proof={arch,installation:'system-pkg',nativeAdministratorAuthorization:true,baseVersion:'0.1.1',signedDownloadRestart:true,automaticRelaunch:true,retained,baseZipSha256:assets[zip]};
   await fs.writeFile(path.join(dir,'upgrade-proof.json'),JSON.stringify(proof));
   if(arch==='arm64')await fs.writeFile(path.join(input,'published-upgrade-proof.json'),JSON.stringify({...proof,baseVersion:'0.1.0',targetVersion:'0.1.1',targetZipSha256:assets[zip]}));
  }
@@ -25,6 +25,8 @@ test('Mac publication combines qualified architectures and refuses altered insta
  assert.throws(()=>desktopUpdateFeed(metadata[1],metadata[0],'darwin'),/architecture/);
  const output=path.join(root,'out');await prepareMacRelease(input,output,'0.1.1');
  const merged=yaml.load(await fs.readFile(path.join(output,'latest-mac.yml'),'utf8'));assert.equal(merged.files.length,2);assert.match(merged.files[0].url,/arm64/);assert.match(merged.files[1].url,/x64/);
+ await fs.writeFile(previousFile,JSON.stringify({...previous,nativeAdministratorAuthorization:false}));
+ await assert.rejects(prepareMacRelease(input,path.join(root,'missing-authorization'),'0.1.1'),/administrator authorization/);
  await fs.writeFile(previousFile,JSON.stringify({...previous,updateFeedSha256:'0'.repeat(64)}));
  await assert.rejects(prepareMacRelease(input,path.join(root,'wrong-feed'),'0.1.1'),/same combined feed/);
  await fs.writeFile(previousFile,JSON.stringify(previous));

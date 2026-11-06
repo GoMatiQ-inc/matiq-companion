@@ -43,7 +43,7 @@ on a fresh disposable Mac CI VM and launches it as the normal user. Publication
 requires this proof on both architectures and for the previous public release
 upgrade. The harness refuses existing app/profile/receipt state, limits process
 cleanup to the owned bundle/cache, and removes only its installed app and receipt.
-A user-owned ZIP upgrade alone does not establish system-PKG update behavior.
+A user-owned ZIP upgrade alone does not establish system-PKG update behavior. The Mac fixture creates a temporary normal administrator only inside a disposable hosted job, verifies its generated password and wrong-password rejection, and submits the exact Companion Add Helper dialog through a test-owned native pointer driver. It never changes authorization/privacy policy or a human account. Credentials stay in memory/stdin, outside logs, argv and files; finally cleanup verifies account/home removal. The driver runs outside the installed bundle so previous public app versions need no new module or production test hook. Publication requires the native-authorization proof as well as actual replacement, relaunch and retained data.
 
 The native upgrade jobs use the combined Apple Silicon/Intel feed and verify the replacement executable architecture with `lipo`. The previous-public-version proof records the combined feed SHA256; publication must reproduce that exact feed from the qualified artifact metadata. A single-architecture feed test is insufficient for the two-architecture release.
 
