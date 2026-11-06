@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ fromJSON(inputs.platform == 'mac' && '["macos-latest"]' || inputs.platform == 'windows' && '["windows-latest"]' || '["macos-latest","windows-latest"]') }}
+        os: ${{ fromJSON(inputs.platform == 'mac' && '["macos-latest","macos-15-intel"]' || inputs.platform == 'windows' && '["windows-latest","windows-11-arm"]' || '["macos-latest","macos-15-intel","windows-latest","windows-11-arm"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
     permissions:
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: runner.os == 'macOS'
         with:
-          name: verified-mac-upgrade-target
+          name: verified-mac-upgrade-target-${{ runner.arch }}
           retention-days: 3
           if-no-files-found: error
           path: |
@@ -153,6 +153,56 @@ jobs:
   upgrade:
     needs: signed
     if: inputs.platform != 'windows'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/companion-models
+          key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
+          enableCrossOsArchive: true
+      - run: npm ci --no-audit --no-fund
+      - run: npm run test:inference
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - uses: actions/download-artifact@v4
+        with:
+          name: signed-${{ matrix.os }}
+          path: dist
+      - uses: actions/download-artifact@v4
+        with:
+          name: verified-mac-upgrade-target-${{ runner.arch }}
+          path: upgrade-target
+      - name: Qualify real signed download, restart and retained projects/models
+        timeout-minutes: 8
+        run: npm run test:upgrade
+        env:
+          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: signed-upgrade-diagnostics-${{ runner.arch }}
+          retention-days: 3
+          if-no-files-found: ignore
+          path: .validation/upgrade-diagnostic.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mac-upgrade-proof-${{ runner.arch }}
+          retention-days: 7
+          if-no-files-found: error
+          path: dist/upgrade-proof.json
+  published-upgrade:
+    needs: signed
+    if: inputs.platform != 'windows'
     runs-on: macos-latest
     timeout-minutes: 12
     steps:
@@ -173,12 +223,26 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: signed-macos-latest
-          path: dist
-      - uses: actions/download-artifact@v4
-        with:
-          name: verified-mac-upgrade-target
           path: upgrade-target
-      - name: Qualify real signed download, restart and retained projects/models
+      - name: Download and checksum the current public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          import hashlib,json,os,pathlib,re,subprocess
+          repo=os.environ['GITHUB_REPOSITORY']
+          tag=json.loads(subprocess.check_output(['gh','release','view','--repo',repo,'--json','tagName'],text=True))['tagName']
+          assert re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+',tag)
+          target=json.loads(pathlib.Path('package.json').read_text())['version']
+          assert tuple(map(int,tag[1:].split('.')))<tuple(map(int,target.split('.')))
+          name=f'MatiQ-Companion-{tag[1:]}-mac-arm64.zip'
+          subprocess.run(['gh','release','download',tag,'--repo',repo,'--pattern',name,'--pattern','SHA256SUMS.txt','--dir','dist'],check=True)
+          lines=(pathlib.Path('dist')/'SHA256SUMS.txt').read_text().splitlines()
+          expected=[line.split()[0] for line in lines if line.split()[-1]==name]
+          assert len(expected)==1 and hashlib.sha256((pathlib.Path('dist')/name).read_bytes()).hexdigest()==expected[0]
+          with open(os.environ['GITHUB_ENV'],'a') as env: env.write(f'COMPANION_UPGRADE_BASE_VERSION={tag[1:]}\nCOMPANION_UPGRADE_TARGET_VERSION={target}\n')
+          PYTHON
+      - name: Upgrade the public installed version to these exact candidate bytes
         timeout-minutes: 8
         run: npm run test:upgrade
         env:
@@ -186,19 +250,19 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: signed-upgrade-diagnostics
+          name: published-upgrade-diagnostics
+          include-hidden-files: true
           retention-days: 3
-          if-no-files-found: ignore
           path: .validation/upgrade-diagnostic.json
       - uses: actions/upload-artifact@v4
         with:
-          name: mac-upgrade-proof
+          name: published-mac-upgrade-proof
           retention-days: 7
-          if-no-files-found: error
           path: dist/upgrade-proof.json
+          if-no-files-found: error
   draft:
     if: github.event_name == 'push'
-    needs: [signed, upgrade]
+    needs: [signed, upgrade, published-upgrade]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

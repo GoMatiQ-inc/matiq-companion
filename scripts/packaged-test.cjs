@@ -10,7 +10,7 @@ const candidates =
           "MatiQ Companion.app/Contents/MacOS/MatiQ Companion",
         ),
       )
-    : [path.resolve("dist/win-unpacked/MatiQ Companion.exe")];
+    : [path.resolve(`dist/${process.arch === "arm64" ? "win-arm64-unpacked" : "win-unpacked"}/MatiQ Companion.exe`)];
 const executable = candidates.find((file) => fs.existsSync(file));
 if (!executable)
   throw Error(

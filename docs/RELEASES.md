@@ -27,3 +27,13 @@ The Mac signing job also builds a signed next-patch qualification version, valid
 `Publish verified Mac installer` can publish the Mac platform independently while Microsoft issuance is unavailable. It accepts only a successful trusted signed run, requires exact-source native CI and real upgrade-preservation proof, and checks every asset against the signature report before publishing. It reuses the tested bytes; it does not rebuild or resign during publication.
 
 Mac signing retains the verified base and newer target as separate artifacts. A dependent native upgrade job downloads those exact artifacts and emits proof tied to the base ZIP SHA256. Rerun only the failed upgrade job when diagnosing native updater behavior; never rebuild or replace its signed inputs during a retry. Publication requires both jobs to succeed in the same trusted workflow. Native stdout/stderr and process state are captured before cleanup.
+
+## Multi-architecture Mac qualification
+
+For 0.1.1 and later, the signing workflow uses Apple Silicon and Intel runners.
+Each artifact keeps its architecture in the filename. Each runner qualifies an
+actual signed download/restart, and a separate Apple Silicon job upgrades the
+current public release into the candidate bytes. The publisher requires all
+three proofs, verifies both original signature manifests, and creates one update
+feed containing both verified ZIP entries. Never merge artifact directories with
+identically named manifests or metadata before checking their contents.

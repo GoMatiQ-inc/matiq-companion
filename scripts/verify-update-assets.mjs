@@ -3,9 +3,9 @@ import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import yaml from "js-yaml";
-export async function verifyUpdateAssets(directory, version, platform) {
+export async function verifyUpdateAssets(directory, version, platform, arch = platform === "darwin" ? "arm64" : "x64") {
   const mac = platform === "darwin";
-  const name = `MatiQ-Companion-${version}-${mac ? "mac-arm64.zip" : "windows-x64.exe"}`;
+  const name = `MatiQ-Companion-${version}-${mac ? `mac-${arch}.zip` : `windows-${arch}.exe`}`;
   const metadataName = mac ? "latest-mac.yml" : "latest.yml";
   const metadata = yaml.load(
     await readFile(path.join(directory, metadataName), "utf8"),

@@ -12,11 +12,13 @@ const lifecycle = require("./fixture-lifecycle.cjs");
 const { waitFor } = require("./wait-for.cjs");
 const { ModelStore } = require("../src/models.cjs");
 const { MODELS } = require("../src/catalog.cjs");
-const { version: baseVersion } = require("../package.json");
-const targetVersion = baseVersion
+const baseVersion = process.env.COMPANION_UPGRADE_BASE_VERSION || require("../package.json").version;
+const targetVersion = process.env.COMPANION_UPGRADE_TARGET_VERSION || baseVersion
   .split(".")
   .map((n, i) => Number(n) + (i === 2 ? 1 : 0))
   .join(".");
+for (const version of [baseVersion,targetVersion]) assert.match(version,/^\d+\.\d+\.\d+$/);
+assert.equal(require("../node_modules/semver").gt(targetVersion,baseVersion),true,"Upgrade target must be newer than the base.");
 async function hash(file) {
   const digest = createHash("sha256");
   for await (const chunk of createReadStream(file)) digest.update(chunk);
@@ -354,6 +356,7 @@ async function bundleVersion(apps) {
     assert.equal(await fs.readFile(generated, "utf8"), marker);
     const proof = {
       platform: "darwin",
+      arch: process.arch,
       baseVersion,
       targetVersion,
       signedDownloadRestart: true,
@@ -363,6 +366,7 @@ async function bundleVersion(apps) {
       dataPaths:
         "unchanged default profile and shared model store on disposable CI VM",
       baseZipSha256: await hash(baseZip),
+      targetZipSha256: await hash(path.join(targetDirectory,`MatiQ-Companion-${targetVersion}-mac-${process.arch}.zip`)),
       retained: {
         project: true,
         settings: true,

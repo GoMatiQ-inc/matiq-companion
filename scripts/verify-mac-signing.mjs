@@ -78,7 +78,7 @@ run("/usr/sbin/spctl", ["--assess", "--type", "execute", "--verbose=4", app]);
 run("/usr/sbin/spctl", ["--assess", "--type", "install", "--verbose=4", pkg]);
 const zipName = `MatiQ-Companion-${version}-mac-${process.arch}.zip`;
 const folder = path.join(root, output);
-await verifyUpdateAssets(folder, version, "darwin");
+await verifyUpdateAssets(folder, version, "darwin", process.arch);
 const extracted = await mkdtemp(
   path.join(os.tmpdir(), "matiq-update-signature-"),
 );
@@ -119,6 +119,7 @@ await writeFile(
   JSON.stringify(
     {
       platform: "darwin",
+      arch: process.arch,
       version,
       artifact,
       sha256: assets[artifact],

@@ -22,7 +22,8 @@ const assert = require("node:assert/strict");
     processHandle = app.process();
     owned = lifecycle.capture(processHandle);
     app.on("console", (m) => console.log("Electron:", m.text()));
-    await app.firstWindow();
+    const mainPage = await app.firstWindow();
+    await mainPage.getByRole("heading", {name:"Your own AI workspace."}).waitFor();
     const result = await app.evaluate(
       async ({ BrowserWindow, app, screen }) => {
         const root = app.getAppPath();
@@ -30,6 +31,7 @@ const assert = require("node:assert/strict");
         const { computerAccess } = process.mainModule.require(root + "/src/computer-access.cjs");
         const main = BrowserWindow.getAllWindows()[0];
         const fixture = new BrowserWindow({
+          alwaysOnTop: true,
           width: 800,
           height: 600,
           x: screen.getPrimaryDisplay().workArea.x + 40,
@@ -44,7 +46,7 @@ const assert = require("node:assert/strict");
           await fixture.loadURL(
             "data:text/html," +
               encodeURIComponent(
-                '<html><body style="background:white;color:black;font:32px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:white;color:black;border:3px solid black;padding:15px;margin-top:40px;font:36px sans-serif">CONFIRM</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>',
+                '<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">VERIFY</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>',
               ),
           );
           fixture.show();
@@ -72,7 +74,7 @@ const assert = require("node:assert/strict");
           await observe();
           await computer("press_key", { key: "Backspace" }, signal);
           const last = await observe();
-          const confirm = last.words.find((word) => /^confirm$/i.test(word.text));
+          const confirm = last.words.find((word) => /^verify$/i.test(word.text));
           if (!confirm) {
             const b = fixture.getBounds(), d = screen.getPrimaryDisplay().bounds;
             const fixtureWords = last.words.filter(w => w.x >= b.x-d.x && w.x < b.x-d.x+b.width && w.y >= b.y-d.y && w.y < b.y-d.y+b.height).map(w => w.text);

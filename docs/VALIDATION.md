@@ -34,3 +34,29 @@ An earlier test clicked Restart before the ZIP completed: its async Playwright p
 ## Dependency audit
 
 The initial production dependency audit reports nine moderate findings through two transitive dependency chains and no high/critical findings. ExcelJS uses only uuid v4, whereas [GHSA-w5hq-g745-h8pq](https://github.com/advisories/GHSA-w5hq-g745-h8pq) concerns buffer-based v3/v5/v6. The computer-input library includes Jimp/file-type, with [GHSA-5v7r-6r5c-r473](https://github.com/advisories/GHSA-5v7r-6r5c-r473) affecting malformed ASF detection. Companion does not expose Jimp image-file decoding or file-type detection to tools; its OCR accepts screen PNG bytes. This is a reachability assessment, not removal of the flagged packages. Reassess/pin compatible upstream fixes before broader computer-use expansion. Do not run forced major-version audit fixes without native regression checks.
+
+## Completion candidate 0.1.1
+
+The completion branch adds in-process Quartz and Windows SendInput bindings,
+macOS permission controls, and native Intel Mac/Windows ARM64 jobs. Run
+`npm run test:computer` to exercise real OCR, pointer focus, Unicode text,
+Backspace, button activation and stale-observation rejection in an owned window.
+`test:packaged` repeats the fixture using the built executable. Native computer
+input dispatch remains an attempt until the target application is observed again.
+
+Run 42246228808 qualified development and packaged computer use on Apple
+Silicon, Intel Mac and Windows x64. Windows ARM64 compiled its native binding
+but failed to locate the fixture label; it is not yet qualified. Subsequent runs
+must resolve fixture visibility/OCR failures rather than bypass their assertions.
+
+The candidate release pipeline requires independently signed builds and actual
+upgrade tests for both Mac architectures. It also upgrades the current public
+Apple Silicon version into the exact candidate ZIP. Publication combines the
+architecture entries only after checking the original signature manifests,
+SHA256, SHA512, sizes and retained-data proofs. These additions are not a claim
+that 0.1.1 has been signed or published yet.
+
+Microsoft's live identity-validation list on November 6 shows **In Progress**.
+The profile still awaits issuer approval. No additional owner document request
+was confirmed; the previous profile API error is historical, not evidence that
+the live identity request disappeared.
