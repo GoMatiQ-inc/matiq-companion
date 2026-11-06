@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { ModelStore } = require("../src/models.cjs");
 const { MODELS } = require("../src/catalog.cjs");
+process.once("exit", code => console.log("Native inference process exit:", code));
 const dir = process.env.COMPANION_VALIDATION_MODELS;
 if (!dir)
   throw Error("Set COMPANION_VALIDATION_MODELS to a task-owned model folder.");
@@ -43,7 +44,11 @@ try {
   );
   session.dispose();
 } finally {
+  console.log("Disposing inference context.");
   await context.dispose();
+  console.log("Disposing inference model.");
   await model.dispose();
+  console.log("Disposing inference backend.");
   await llama.dispose();
+  console.log("PASS: native inference resources disposed.");
 }

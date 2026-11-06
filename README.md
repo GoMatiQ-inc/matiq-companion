@@ -30,7 +30,7 @@ Use Node 22 or newer. Run `npm ci`, `npm test`, then `npm start`. Linux desktop 
 
 ## MatiQ Voice interoperability
 
-Both apps use a typed MatiQ model-store layout. Shared artifacts are identified by kind and hash; ASR, speaker and chat models remain distinct. Voice requires the shared-store bridge update before it participates. Companion does not modify an installed Voice profile. Existing Voice worker paths can use hard links on the same filesystem, with a copy fallback across volumes. Sharing a directory does not make a speech model usable as a chat model.
+Both apps use a typed MatiQ model-store layout. Shared artifacts are identified by kind and hash; ASR, speaker and chat models remain distinct. MatiQ Voice 0.3.9 and later include the shared-store bridge; update older installations before expecting sharing. Companion does not modify an installed Voice profile. Existing Voice worker paths can use hard links on the same filesystem, with a copy fallback across volumes. Sharing a directory does not make a speech model usable as a chat model.
 
 ## License
 

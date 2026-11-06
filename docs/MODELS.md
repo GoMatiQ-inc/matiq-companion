@@ -12,4 +12,4 @@ The initial catalog offers Qwen3 0.6B Q8 (approximately 610 MiB), 1.7B Q8 (1.71 
 
 Each artifact is `kind/sha256/filename`, with an adjacent `.json` containing schema, ID, kind, format, hash, bytes and license. Kinds include `llm`, `asr`, `speaker` and `ocr`. Exclusive `.lock` files coordinate writers. Inspect a stale lock and the owning process before removing it. Applications must not delete artifacts another family app may use. There is no automatic model garbage collection in this version.
 
-Downloads need room for the full artifact plus a 2 GiB free-space floor. An installer does not bundle model weights. Voice interoperability requires its bridge version, not merely installing Companion.
+Downloads need room for the full artifact plus a 2 GiB free-space floor. An installer does not bundle model weights. Voice interoperability requires MatiQ Voice 0.3.9 or later, not merely installing Companion.

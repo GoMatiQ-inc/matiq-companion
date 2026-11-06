@@ -10,7 +10,7 @@
   "scripts": {
     "start": "npm run native:build && electron .",
     "test": "node --test test/*.test.cjs",
-    "test:desktop": "node scripts/desktop-test.cjs",
+    "test:desktop": "npm run native:build && node scripts/desktop-test.cjs",
     "test:inference": "node scripts/inference-test.mjs",
     "package": "npm run native:build && electron-builder --publish never",
     "package:dir": "npm run native:build && electron-builder --dir --publish never",

@@ -355,6 +355,10 @@ async function bundleVersion(apps) {
       await fs.realpath(applicationInfo(launch.pid).bundle),
       await fs.realpath(windows ? apps : path.join(apps, "MatiQ Companion.app")),
     );
+    if(!windows) {
+      const nativeArch=execFileSync("/usr/bin/lipo",["-archs",executable],{encoding:"utf8",timeout:15000}).trim();
+      assert.equal(nativeArch,process.arch==='x64'?'x86_64':'arm64',"The update must select the native architecture, without Rosetta masking a wrong feed entry.");
+    }
     const after = {
       project: await hash(projectFile),
       settings: await hash(settings),

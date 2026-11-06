@@ -47,7 +47,7 @@ jobs:
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
           if ($errors.Count) { throw ($errors | Out-String) }
-      - run: npm run test:inference
+      - run: node scripts/inference-test.mjs
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:tools
