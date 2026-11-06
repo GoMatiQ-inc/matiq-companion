@@ -54,8 +54,21 @@ jobs:
               for os_name in ['windows-latest','windows-11-arm']:
                   for job in [f'signed ({os_name})',f'windows-upgrade ({os_name})',f'published-upgrade ({os_name})']:
                       assert job in successful,f'Require native Windows signature and upgrade qualification: {job}'
-          checks=json.loads(gh('api',f'repos/{repo}/actions/workflows/checks.yml/runs?head_sha={sha}&status=completed&per_page=20'))['workflow_runs']
-          assert any(r['head_sha']==sha and r['conclusion']=='success' for r in checks),'Require native platform CI on the exact source commit.'
+          checks=json.loads(gh('api',f'repos/{repo}/actions/workflows/checks.yml/runs?status=completed&per_page=20'))['workflow_runs']
+          source_tree=subprocess.check_output(['git','rev-parse',f'{sha}^{{tree}}'],text=True).strip()
+          native_required={f'native ({os_name}, {platform}, {arch})' for os_name,platform,arch in [('macos-latest','darwin','arm64'),('macos-15-intel','darwin','x64'),('windows-latest','win32','x64'),('windows-11-arm','win32','arm64')]}
+          native_proof=None
+          for check in checks:
+              if check['conclusion']!='success' or check['head_repository']['full_name']!=repo: continue
+              tested=check['head_sha']
+              if subprocess.run(['git','merge-base','--is-ancestor',tested,'origin/main'],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL).returncode: continue
+              tested_tree=subprocess.check_output(['git','rev-parse',f'{tested}^{{tree}}'],text=True).strip()
+              if tested_tree!=source_tree: continue
+              native_jobs=json.loads(gh('api',f"repos/{repo}/actions/runs/{check['id']}/jobs?per_page=100"))['jobs']
+              if native_required<={job['name'] for job in native_jobs if job['conclusion']=='success'}:
+                  native_proof=check;break
+          assert native_proof,'Require all four native jobs on the exact complete source tree in trusted main history.'
+          print(f"Qualified native source: run={native_proof['id']} commit={native_proof['head_sha']} tree={source_tree}; signed source={sha}")
           metadata=json.loads(subprocess.check_output(['git','show',f'{sha}:package.json'],text=True));version=metadata['version']
           assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+',version) and metadata['build']['appId']=='com.matiq.companion','Require the Companion identity and a stable version.'
           previous=json.loads(gh('release','view','--repo',repo,'--json','tagName,assets'))
@@ -103,7 +116,7 @@ jobs:
 
           {windows_note}
 
-          [Verified qualification]({run['html_url']}); source `{sha}`. Computer actions require per-project enablement and individual approval; Mac also requires Screen Recording and Accessibility access. Voice model sharing requires Voice 0.3.9 or later; speech and chat models remain distinct.
+          [Verified signing and installed upgrades]({run['html_url']}); source `{sha}`. [Four-platform native CI]({native_proof['html_url']}) verified the identical complete Git tree `{source_tree}`. Computer actions require per-project enablement and individual approval; Mac also requires Screen Recording and Accessibility access. Voice model sharing requires Voice 0.3.9 or later; speech and chat models remain distinct.
 
           Free personal and internal business use under the [MatiQ Companion No-Sale License](https://github.com/{repo}/blob/{sha}/LICENSE). Third-party code and model weights retain their licenses.
           """
