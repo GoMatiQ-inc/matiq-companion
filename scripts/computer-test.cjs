@@ -37,9 +37,11 @@ const {execFileSync}=require('node:child_process');
           assert.equal(changed.words.filter(w=>/^yes$/i.test(w.text)).length,yes.length-1,'The optional CI privacy switch did not turn off. Inspect before continuing.');
           desktopPreparation.togglesDisabled++;setup=changed;
         } else {
-          const inspectedPage=desktopPreparation.togglesDisabled===2 && (desktopPreparation.pages===0 || (desktopPreparation.pages===1 && /Personalized\s+offers/i.test(setup.text) && /Select\s+Learn\s+more/i.test(setup.text)));
+          const wordsText=setup.words.map(w=>w.text).join(' ');
+          const inspectedFinal=desktopPreparation.pages>=1 && /Personalized offers/i.test(wordsText) && /Select Learn more/i.test(wordsText);
+          const inspectedPage=desktopPreparation.togglesDisabled>=2 && desktopPreparation.togglesDisabled<=3 && (desktopPreparation.pages===0 || inspectedFinal);
           const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text) && w.x>setup.width*0.7 && w.y>setup.height*0.75) || (inspectedPage ? {x:867,y:656} : null);
-          assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing: '+JSON.stringify(setup.words.map(w=>w.text)));
+          assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing: '+JSON.stringify({desktopPreparation,words:setup.words.map(w=>w.text)}));
           await act('click_screen',{x:next.x,y:next.y});desktopPreparation.pages++;
           setup=await act('observe_screen');
         }
