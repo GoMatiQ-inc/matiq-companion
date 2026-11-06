@@ -102,13 +102,13 @@ const DEFINITIONS = [
   [
     "type_text",
     "computer",
-    "After approval, type into the currently focused app. This can affect locations outside file grants.",
+    "After approval, type into the observed target app. Click its field and observe again first. This can affect locations outside file grants.",
     schema({ text: string }),
   ],
   [
     "press_key",
     "computer",
-    "After approval, press one supported key: Enter, Escape, Tab, Backspace or an arrow.",
+    "After approval, click the target field and observe again before pressing one supported key: Enter, Escape, Tab, Backspace or an arrow.",
     schema({
       key: {
         type: "string",

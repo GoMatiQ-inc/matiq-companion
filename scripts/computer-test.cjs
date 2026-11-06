@@ -29,6 +29,10 @@ const assert = require('node:assert/strict');
     const observed=await act('observe_screen');
     const label=observed.words.find(w=>/^target$/i.test(w.text));
     if(!label) {
+      if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64' && /Choose privacy settings/i.test(observed.text)) {
+        const png=await app.evaluate(async({desktopCapturer,screen})=>{const display=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:display.size.width,height:display.size.height}});return sources.find(s=>s.display_id===String(display.id)).thumbnail.toPNG().toString('base64');});
+        await fs.mkdir('.validation',{recursive:true});await fs.writeFile('.validation/computer-win32-arm64-initial-privacy.png',Buffer.from(png,'base64'));
+      }
       const geometry=await target.evaluate(({BrowserWindow,screen})=>({bounds:BrowserWindow.getAllWindows()[0].getBounds(),display:screen.getPrimaryDisplay().bounds,focused:BrowserWindow.getAllWindows()[0].isFocused()}));
       const b=geometry.bounds,d=geometry.display;
       const words=observed.words.filter(w=>w.x>=b.x-d.x&&w.x<b.x-d.x+b.width&&w.y>=b.y-d.y&&w.y<b.y-d.y+b.height).map(w=>w.text);

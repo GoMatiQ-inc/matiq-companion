@@ -91,3 +91,10 @@ was reverted. The next fixture uses a software renderer on the ARM virtual
 runner and permits one observed activation click before requiring field focus.
 Both native clicks still require a fresh observation; receiving text and button
 activation in the separate process remain mandatory assertions.
+
+The separate-process fixture exposed lost Mac keyboard focus after approval.
+The adapter now retains the application PID after the approved click, restores
+that application through Accessibility and verifies activation before posting
+keys. Initial keyboard input requires clicking the target field first. This
+new binding requires native qualification; the earlier in-process pass did not
+cover it.

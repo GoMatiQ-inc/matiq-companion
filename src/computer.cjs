@@ -3,7 +3,7 @@ const { createWorker } = require("tesseract.js");
 const language = require("@tesseract.js-data/eng");
 const { computerAccess } = require("./computer-access.cjs");
 function createComputer(window) {
-  let observation = null, focusWindow = null;
+  let observation = null, focusWindow = null, macTarget = null;
   return async (name, args, signal) => {
     if (signal?.aborted) throw Error("Task stopped.");
     const access = computerAccess();
@@ -109,7 +109,7 @@ function createComputer(window) {
       if (process.platform === "win32") {
         await require("./windows-computer.cjs").windowsInput(name, args, display, signal, focusWindow);
       } else if (process.platform === "darwin") {
-        await require("./mac-computer.cjs").macInput(name, args, display, signal);
+        await require("./mac-computer.cjs").macInput(name, args, display, signal, macTarget);
       } else {
         const nut = require("@nut-tree-fork/nut-js");
         if (name === "click_screen") {
@@ -126,6 +126,7 @@ function createComputer(window) {
       }
       // Native input is queued by the OS; let the foreground application receive it before restoring Companion's focus.
       await new Promise((resolve) => setTimeout(resolve, 200));
+      if(process.platform === "darwin" && name === "click_screen") macTarget=require("./mac-computer.cjs").foregroundProcess();
       observation = null;
       return {
         attempted: true,

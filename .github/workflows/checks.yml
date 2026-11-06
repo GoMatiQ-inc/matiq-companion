@@ -79,4 +79,5 @@ jobs:
             dist/*.yml
             dist/*.blockmap
             .validation/computer-*.json
+            .validation/computer-*.png
             .validation/windows-session.json
