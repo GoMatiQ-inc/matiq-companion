@@ -106,3 +106,10 @@ The production adapter uses NSWorkspace/NSRunningApplication for PID lookup and
 activation, followed by an actual foreground-PID check. Accessibility permission
 is still required before posting input. Both fixture processes and the copied
 bundle remain covered by bounded cleanup.
+
+The hosted ARM image's actual screenshot shows Windows first-run privacy setup.
+The fixture can initialize only a disposable GitHub-hosted ARM VM: it recognizes
+the inspected 1024×768 privacy page, turns visible optional Yes switches off and
+verifies each transition before Next/Accept. It stops on unfamiliar layouts or
+failed transitions. It never changes an installed user's OS settings. Native
+capture and independent-application input assertions still run afterwards.

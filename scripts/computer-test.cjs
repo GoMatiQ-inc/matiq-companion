@@ -14,6 +14,38 @@ const {execFileSync}=require('node:child_process');
     ownedApp=lifecycle.capture(app.process());
     const main=await app.firstWindow();
     await main.getByRole('heading',{name:'Your own AI workspace.'}).waitFor();
+    await app.evaluate(({app,BrowserWindow})=>{
+      globalThis.__computer=process.mainModule.require(app.getAppPath()+'/src/computer.cjs').createComputer(BrowserWindow.getAllWindows()[0]);
+    });
+    const act=(name,args={})=>app.evaluate(async(_,{name,args})=>globalThis.__computer(name,args,new AbortController().signal),{name,args});
+    const desktopPreparation={attempted:false,togglesDisabled:0,pages:0};
+    if(process.env.GITHUB_ACTIONS==='true' && process.env.RUNNER_ENVIRONMENT==='github-hosted' && process.platform==='win32' && process.arch==='arm64') {
+      let setup=await act('observe_screen');
+      for(let step=0;step<12 && /Choose\s+privacy\s+settings/i.test(setup.text);step++) {
+        desktopPreparation.attempted=true;
+        const png=await app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');});
+        await fs.mkdir('.validation',{recursive:true});await fs.writeFile('.validation/computer-win32-arm64-initial-privacy.png',Buffer.from(png,'base64'));
+        assert.equal(setup.width,1024,'Inspect the changed CI setup layout before automating it.');
+        assert.equal(setup.height,768,'Inspect the changed CI setup layout before automating it.');
+        const yes=setup.words.filter(w=>/^yes$/i.test(w.text));
+        if(yes.length) {
+          // The inspected first-run layout places each toggle 40 logical pixels left of its Yes label.
+          await act('click_screen',{x:yes[0].x-40,y:yes[0].y});
+          const changed=await act('observe_screen');
+          assert.equal(changed.words.filter(w=>/^yes$/i.test(w.text)).length,yes.length-1,'The optional CI privacy switch did not turn off. Inspect before continuing.');
+          desktopPreparation.togglesDisabled++;setup=changed;
+        } else {
+          assert.ok(setup.words.some(w=>/^no$/i.test(w.text)),'Inspect unfamiliar privacy options before accepting the CI setup page.');
+          const next=setup.words.find(w=>/^(next|accept)$/i.test(w.text));
+          assert.ok(next,'The CI privacy page is unfamiliar. Inspect the screen before continuing.');
+          await act('click_screen',{x:next.x,y:next.y});desktopPreparation.pages++;
+          setup=await act('observe_screen');
+        }
+      }
+      assert.doesNotMatch(setup.text,/Choose\s+privacy\s+settings/i,'The CI first-run privacy experience did not complete.');
+      await fs.mkdir('.validation',{recursive:true});
+      await fs.writeFile('.validation/desktop-preparation-win32-arm64.json',JSON.stringify(desktopPreparation,null,2)+'\n');
+    }
     const entry=path.join(profile,'target.cjs');
     const html='<html><body style="background:white;color:black;font:40px sans-serif"><p>Companion computer verification</p><label for="target">TARGET</label><input id="target" style="display:block;font:28px sans-serif;width:650px"><button id="confirm" style="background:#eee;color:black;border:0;padding:24px;margin-top:30px;font:48px sans-serif">Verify</button><script>window.clicks=0;window.trustedMouse=false;window.trustedKey=false;document.addEventListener("mousedown",e=>window.trustedMouse=e.isTrusted);document.addEventListener("keydown",e=>window.trustedKey=e.isTrusted);document.getElementById("confirm").onclick=()=>window.clicks++;</script></body></html>';
     await fs.writeFile(entry,`const {app,BrowserWindow,screen}=require('electron');if(process.platform==='win32'&&process.arch==='arm64')app.disableHardwareAcceleration();app.setName('Companion Input Target');app.setPath('userData',${JSON.stringify(path.join(profile,'target-profile'))});app.whenReady().then(async()=>{const area=screen.getPrimaryDisplay().workArea;const window=new BrowserWindow({width:800,height:600,x:area.x+40,y:area.y+60,alwaysOnTop:true,webPreferences:{sandbox:true,contextIsolation:true,nodeIntegration:false}});await window.loadURL('data:text/html,'+encodeURIComponent(${JSON.stringify(html)}));window.show();app.focus({steal:true});window.focus();});app.on('window-all-closed',()=>app.quit());`);
@@ -33,10 +65,6 @@ const {execFileSync}=require('node:child_process');
     const page=await target.firstWindow();
     await page.getByText('Companion computer verification',{exact:true}).waitFor();
     await page.evaluate(()=>document.fonts.ready);
-    await app.evaluate(({app,BrowserWindow})=>{
-      globalThis.__computer=process.mainModule.require(app.getAppPath()+'/src/computer.cjs').createComputer(BrowserWindow.getAllWindows()[0]);
-    });
-    const act=(name,args={})=>app.evaluate(async(_,{name,args})=>globalThis.__computer(name,args,new AbortController().signal),{name,args});
     const observed=await act('observe_screen');
     const label=observed.words.find(w=>/^target$/i.test(w.text));
     if(!label) {
@@ -75,7 +103,7 @@ const {execFileSync}=require('node:child_process');
     assert.equal(received.clicks,1);assert.equal(received.trustedMouse,true);assert.equal(received.trustedKey,true);
     const runtime=await app.evaluate(({app,screen})=>({access:process.mainModule.require(app.getAppPath()+'/src/computer-access.cjs').computerAccess(),scaleFactor:screen.getPrimaryDisplay().scaleFactor,packaged:app.isPackaged}));
     await fs.mkdir('.validation',{recursive:true});
-    await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-${runtime.packaged?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,...received,...runtime,separateTargetProcess:true,focusClicks,staleRejected:true},null,2)+'\n');
+    await fs.writeFile(path.join('.validation',`computer-${process.platform}-${process.arch}-${runtime.packaged?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,...received,...runtime,separateTargetProcess:true,focusClicks,desktopPreparation,staleRejected:true},null,2)+'\n');
     console.log('PASS: real screen OCR, pointer focus/click, text and key input into a separate application process; stale observations rejected.');
   } catch(error) {
     await fs.mkdir('.validation',{recursive:true});
