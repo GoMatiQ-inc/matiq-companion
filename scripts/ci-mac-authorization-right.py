@@ -22,14 +22,14 @@ security.AuthorizationFree.restype = c.c_int32
 # kSMRightModifySystemDaemons from Apple ServiceManagement.h; also used by Squirrel.
 right_item = Item(b"com.apple.ServiceManagement.daemons.modify", 0, None, 0)
 rights = Items(1, c.pointer(right_item))
-def authorize(password=None):
+def authorize(password=None, flags=2):
     ref = c.c_void_p()
     environment = None
     if password is not None:
         user_buffer, password_buffer = c.create_string_buffer(name.encode()), c.create_string_buffer(password.encode())
         values = (Item * 3)(Item(b"username", len(name), c.cast(user_buffer, c.c_void_p), 0), Item(b"password", len(password), c.cast(password_buffer, c.c_void_p), 0), Item(b"shared", 0, None, 0))
         environment = Items(3, values)
-    status = security.AuthorizationCreate(c.byref(rights), c.byref(environment) if environment else None, 2, c.byref(ref))
+    status = security.AuthorizationCreate(c.byref(rights), c.byref(environment) if environment else None, flags, c.byref(ref))
     return status, ref
 
 def release(ref, destroy=False):
@@ -44,7 +44,7 @@ if request["operation"] == "grant":
     status, ref = authorize(request["password"])
     if status: raise RuntimeError("Credential-backed authorization failed with status " + str(status))
     try:
-        cached, probe = authorize()
+        cached, probe = authorize(flags=3)
         release(probe)
         if cached: raise RuntimeError("The OS did not share the authenticated authorization with this CI session: " + str(cached))
     finally:
