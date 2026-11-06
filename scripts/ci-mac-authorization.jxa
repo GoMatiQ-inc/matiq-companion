@@ -30,7 +30,7 @@ try {
     if(fields[1].attributes.byName('AXFocused').value()!==true)throw Error('Authorization lost field focus before submission.');
     step='verify-password';if(String(fields[1].value()||'').length!==config.password.length)throw Error('The masked native field has an unexpected character count.');
     step='commit-password';events.keyCode(48);$.NSThread.sleepForTimeInterval(0.3);
-    step='submit';events.keyCode(36);result={authorizationSubmitted:true,passwordLength:config.password.length};
+    step='locate-submit';const position=button.position(),size=button.size();result={readyToSubmit:true,point:[position[0]+size[0]/2,position[1]+size[1]/2],securityAgentPid:agent.unixId(),passwordLength:config.password.length};
   }
 } catch(error) {result={error:step,number:Number(error.errorNumber||error.number)||null};}
 JSON.stringify(result);

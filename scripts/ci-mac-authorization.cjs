@@ -13,14 +13,20 @@ function createAuthorizationFixture(){
   const script=path.join(__dirname,'ci-mac-authorization.jxa');
   return {
     identity,
-    async authorize(){
-      await waitFor(()=>{
+    async authorize(app){
+      const target=await waitFor(()=>{
         const result=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript',script],{input:JSON.stringify({name:identity.name,password}),encoding:'utf8',timeout:12000}));
         if(result.error)throw Error(`Native CI helper authorization failed at ${result.error} (${result.number??'unknown'}); inspect the captured OS dialog.`);
-        if(result.authorizationSubmitted)console.log("Native secure-field length before submission:",result.passwordLength);
-        return result.authorizationSubmitted;
+        return result.readyToSubmit?result:false;
       },'The normal Companion Add Helper authorization dialog',30000);
-      console.log('Native OS helper authorization was submitted using the owned CI identity.');
+      await app.evaluate(({app},target)=>{
+        const input=process.mainModule.require(app.getAppPath()+'/src/native/mac-computer.node');
+        const access=input.access();
+        if(!access.accessibility||!access.postEvents)throw Error('Normal macOS native input permission is required in this disposable CI job.');
+        const actual=input.click(...target.point);
+        if(actual!==target.securityAgentPid)throw Error('The observed authorization button changed target; inspect the native capture.');
+      },target);
+      console.log('Native Add Helper pointer input was submitted to the verified SecurityAgent button.');
     },
     close(){
       const result=invoke('delete');password='';

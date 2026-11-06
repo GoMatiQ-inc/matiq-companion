@@ -346,7 +346,7 @@ async function bundleVersion(apps) {
     await page
       .getByRole("button", { name: "Restart to update", exact: true })
       .click();
-    if(authorizationFixture)await authorizationFixture.authorize();
+    if(authorizationFixture)await authorizationFixture.authorize(app);
     const launch = await waitFor(async () => {
       if ((await bundleVersion(apps)) !== targetVersion) return false;
       const processInfo = processesIn(ownedApplication).find(
@@ -441,7 +441,7 @@ async function bundleVersion(apps) {
       } catch(error) {diagnostic.captureError=error.message;console.error('Upgrade capture diagnostic:',error.message);}
       finally {clearTimeout(captureTimer);}
       try {
-        diagnostic.nativeSystemLog=execFileSync('/usr/bin/log',['show','--last','4m','--style','compact','--predicate','process == "ShipIt" OR process == "SecurityAgent" OR subsystem BEGINSWITH "com.github.Squirrel"'],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024}).slice(-20000);
+        diagnostic.nativeSystemLog=execFileSync('/usr/bin/log',['show','--last','4m','--style','compact','--predicate','process == "ShipIt" OR process == "SecurityAgent" OR process == "authd" OR subsystem BEGINSWITH "com.github.Squirrel"'],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024}).slice(-20000);
         diagnostic.updaterJobs=execFileSync('/bin/launchctl',['list'],{encoding:'utf8',timeout:10000}).split('\n').filter(line=>/ShipIt|companion/i.test(line));
         diagnostic.authorizationElements=execFileSync('/usr/bin/osascript',['-e','tell application "System Events" to tell process "SecurityAgent" to get entire contents of window 1'],{encoding:'utf8',timeout:10000,maxBuffer:128*1024}).slice(-10000);
       } catch(error) {diagnostic.nativeLogError=error.message;console.error('Upgrade native-log diagnostic:',error.message);}
