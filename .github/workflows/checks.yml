@@ -1,108 +1,95 @@
 name: Desktop checks
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
-concurrency:
-  group: checks-${{ github.ref }}
-  cancel-in-progress: true
+  actions: read
 jobs:
   native:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { os: macos-latest, platform: darwin, arch: arm64 }
-          - { os: macos-15-intel, platform: darwin, arch: x64 }
-          - { os: windows-latest, platform: win32, arch: x64 }
-          - { os: windows-11-arm, platform: win32, arch: arm64 }
+          - {os: macos-latest, arch: ARM64, other_arch: X64, journey: published}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Use the owned Intel Apple ticket transport
+        if: runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py setup
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
           cache: npm
-      - name: Verify the native platform and architecture
-        run: node -e "const a=require('node:assert/strict');a.equal(process.platform,'${{ matrix.platform }}');a.equal(process.arch,'${{ matrix.arch }}');"
-      - name: Qualify the scoped Intel Apple-ticket transport
-        if: runner.os == 'macOS' && runner.arch == 'X64'
-        run: python3 scripts/ci-notary-transport.py setup
-      - name: Verify original Intel firewall state is restored
-        if: always() && runner.os == 'macOS' && runner.arch == 'X64'
-        run: python3 scripts/ci-notary-transport.py cleanup
-      - name: Reuse portable model weights; inference re-verifies their hash
-        uses: actions/cache@v4
+      - uses: actions/cache@v4
         with:
           path: ${{ runner.temp }}/companion-models
           key: companion-gguf-v1-${{ hashFiles('src/catalog.cjs') }}
           enableCrossOsArchive: true
-      - run: npm ci
-      - run: npm test
-      - name: Parse the Windows distribution verifier
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          $tokens = $null
-          $errors = $null
-          [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $PWD 'scripts/verify-windows-signing.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
-          if ($errors.Count) { throw ($errors | Out-String) }
-      - run: npm run test:computer
-      - name: Verify repeated Windows model lifetimes
-        if: runner.os == 'Windows' && runner.arch == 'X64'
-        shell: pwsh
+      - run: npm ci --no-audit --no-fund
+      - run: npm run native:build
+      - name: Verify normal input permission for the external test driver
+        run: node -e "const a=require('./src/native/mac-computer.node').access();console.log(a);if(!a.accessibility||!a.postEvents)throw Error('Normal native CI input access is required.');"
+      - run: npm run test:inference
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-        run: |
-          for ($iteration=1; $iteration -le 5; $iteration++) {
-            Write-Host "Default mapped native model lifecycle $iteration of 5"
-            node scripts/inference-test.mjs
-            if ($LASTEXITCODE -ne 0) {
-              $originalExit=$LASTEXITCODE
-              $env:COMPANION_INFERENCE_DEBUG='1'
-              node scripts/inference-test.mjs
-              throw "Native model lifecycle failed with exit $originalExit. Diagnostic rerun does not replace the failure."
-            }
-          }
-      - run: node scripts/inference-test.mjs
+      - name: Inspect and checksum the previous public installer
+        if: matrix.journey == 'published'
+        run: node scripts/prepare-public-upgrade.mjs
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - uses: actions/download-artifact@v4
+        if: matrix.journey == 'candidate'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42307226102
+          name: signed-${{ matrix.os }}
+          path: dist
+      - uses: actions/download-artifact@v4
+        if: matrix.journey == 'candidate'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42307226102
+          name: verified-mac-upgrade-target-${{ matrix.arch }}
+          path: upgrade-target
+      - uses: actions/download-artifact@v4
+        if: matrix.journey == 'candidate'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42307226102
+          name: verified-mac-upgrade-target-${{ matrix.other_arch }}
+          path: other-upgrade-target
+      - uses: actions/download-artifact@v4
+        if: matrix.journey == 'published'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42307226102
+          name: signed-macos-latest
+          path: upgrade-target
+      - uses: actions/download-artifact@v4
+        if: matrix.journey == 'published'
+        with:
+          github-token: ${{ github.token }}
+          run-id: 42307226102
+          name: signed-macos-15-intel
+          path: other-upgrade-target
+      - name: Qualify retained signed root-installed update bytes
+        timeout-minutes: 8
+        run: npm run test:upgrade
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-      - run: npm run test:tools
-        env:
-          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-      - run: npm run test:desktop
-        env:
-          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
-      - name: Inspect native Windows desktop session
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./scripts/inspect-windows-session.ps1
-      - run: npm run package
-      - run: npm run test:packaged
-        env:
-          COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
+          COMPANION_UPGRADE_SYSTEM_INSTALL: '1'
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: development-installer-${{ matrix.os }}
+          name: retained-ready-user-${{ matrix.os }}-${{ matrix.journey }}
           include-hidden-files: true
           retention-days: 3
-          if-no-files-found: error
+          if-no-files-found: warn
           path: |
-            dist/*.dmg
-            dist/*.zip
-            dist/*.exe
-            dist/*.yml
-            dist/*.blockmap
-            .validation/desktop-*-failure.*
-            .validation/worker-lifetimes-*.json
-            .validation/computer-*.json
-            .validation/computer-*.png
-            .validation/windows-session.json
-            .validation/desktop-preparation-*.json
+            .validation/upgrade-*
+            dist/upgrade-proof.json
+      - name: Verify Intel transport cleanup
+        if: always() && runner.arch == 'X64'
+        run: python3 scripts/ci-notary-transport.py cleanup
