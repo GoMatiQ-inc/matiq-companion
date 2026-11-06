@@ -108,6 +108,25 @@ const assert = require("node:assert/strict");
     console.log(
       "PASS: real Electron navigation, project persistence, independent tool toggles and model setup screen.",
     );
+    await app.evaluate(({app,dialog})=>{
+      const require=process.getBuiltinModule('module').createRequire(app.getAppPath()+'/package.json');
+      const fs=require('node:fs/promises'),rename=fs.rename,show=dialog.showErrorBox;let held=false;
+      globalThis.fixturePendingWrite=false;globalThis.fixtureCloseError='';
+      fs.rename=async(...args)=>{if(!held&&String(args[1]).endsWith('project.json')){held=true;globalThis.fixturePendingWrite=true;await new Promise(resolve=>{globalThis.fixtureReleaseWrite=resolve;});}return rename(...args);};
+      dialog.showErrorBox=(_title,message)=>{globalThis.fixtureCloseError=message;};
+      globalThis.fixtureRestoreWrite=()=>{globalThis.fixtureReleaseWrite?.();fs.rename=rename;dialog.showErrorBox=show;};
+    });
+    const pending=page.evaluate(id=>window.companion.call('project.policy',{id,tool:'documents',enabled:true}),state.projects[0].id);
+    await waitFor(()=>app.evaluate(()=>globalThis.fixturePendingWrite),'Pending project write reached its commit',10000);
+    await app.evaluate(({app})=>app.quit());
+    await waitFor(()=>app.evaluate(()=>globalThis.fixtureCloseError.includes('current Companion request')),'Close refusal while project write is pending',10000);
+    assert.equal(await page.evaluate(()=>document.documentElement.inert),false);
+    assert.equal(JSON.parse(await fs.readFile(path.join(profile,'projects',state.projects[0].id,'project.json'))).tools.documents,false);
+    await app.evaluate(()=>globalThis.fixtureReleaseWrite());await pending;
+    assert.equal(JSON.parse(await fs.readFile(path.join(profile,'projects',state.projects[0].id,'project.json'))).tools.documents,true);
+    await app.evaluate(()=>globalThis.fixtureRestoreWrite());
+    console.log('PASS: standalone close waits for a pending project commit and preserves its completed write.');
+
   } catch(error) {
     if(page) {
       try {
@@ -119,6 +138,7 @@ const assert = require("node:assert/strict");
     throw error;
   } finally {
     const tree=lifecycle.captureTree(owned);
+    if(app)await app.evaluate(()=>globalThis.fixtureRestoreWrite?.()).catch(error=>console.error('Write fixture restoration failed:',error.message));
     await app?.close();
     for(const process of tree)await lifecycle.verifyStopped(process);
     clearTimeout(watchdog);

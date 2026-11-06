@@ -10,7 +10,6 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fork } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
-const { pathToFileURL } = require("node:url");
 const { Projects, atomicJSON } = require("./projects.cjs");
 const { ModelStore, sharedRoot } = require("./models.cjs");
 const { MODELS } = require("./catalog.cjs");
@@ -35,6 +34,8 @@ let window,
 const approvals = new Map();
 let runtime = null;
 let persisting = 0;
+let standaloneClosing=false;
+const standaloneRequests=new Set();
 const emit = (event) => {
   if (window && !window.isDestroyed())
     contents.send("companion:event", event);
@@ -392,11 +393,15 @@ function cancel() {
       install: () => {throw Error('Restart from MatiQ Solutions when all active work is finished.');}
     } : configureUpdates(app, emit);
     if (host) host.handle('companion:request', request);
-    else ipcMain.handle("companion:request", async (event, name, args) => {
-      if (event.sender !== contents || event.senderFrame !== contents.mainFrame || event.senderFrame.url !== pathToFileURL(path.join(__dirname,'ui/index.html')).href)
-        throw Error('Requests are accepted only from the trusted app window.');
-      return request(name,args);
-    });
+    else {
+      const requireFrame=require('@matiq-solutions/runtime/trusted-frame.cjs').frameGuard(contents,path.join(__dirname,'ui/index.html'));
+      ipcMain.handle("companion:request", async (event, name, args) => {
+      await requireFrame(event);
+      if(standaloneClosing)throw Error('Companion is closing. Reopen it before starting more work.');
+      const pending=Promise.resolve().then(()=>request(name,args));standaloneRequests.add(pending);
+      try{return await pending;}finally{standaloneRequests.delete(pending);}
+      });
+    }
     await contents.loadFile(path.join(__dirname, "ui/index.html"));
     if(!host)await require("@matiq-solutions/shell").apply(contents);
     return {
@@ -405,6 +410,17 @@ function cancel() {
         const draft = !contents.isDestroyed() && await contents.executeJavaScript("Boolean(document.querySelector('#message')?.value.trim())");
         return {busy:Boolean(active || persisting || download || approvals.size || draft),reason:persisting?'saving the response':active?'generating a response':download?'downloading a model':approvals.size?'waiting for approval':draft?'send or clear your draft message':''};
       },
+      async prepareClose() {
+        let timer;
+        try{
+          await Promise.race([Promise.allSettled([...standaloneRequests]),new Promise(resolve=>{timer=setTimeout(resolve,1000);})]);
+          if(standaloneRequests.size)throw Error('Wait for the current Companion request to finish.');
+          const state=await this.status();if(state.busy)throw Error('Finish Companion work before quitting: '+state.reason);
+          if(standaloneRequests.size)throw Error('Wait for the current Companion request to finish.');
+          standaloneClosing=true;
+        }finally{clearTimeout(timer);}
+      },
+      resume(){standaloneClosing=false;},
       async dispose() {
         download?.abort(); active?.abort.abort();
         for (const resolve of approvals.values()) resolve(false);
@@ -429,7 +445,7 @@ async function launch() {
   app.on('window-all-closed',()=>app.quit());
   app.on('before-quit',event=>{
     if(quitting)return;event.preventDefault();if(checking)return;checking=true;
-    (async()=>{await tool.window.webContents.executeJavaScript('document.documentElement.inert=true');const status=await tool.status();if(status.busy)throw Error('Finish Companion work before quitting: '+status.reason);await tool.dispose();await lease.release();quitting=true;app.quit();})().catch(async error=>{if(!tool.window.isDestroyed())await tool.window.webContents.executeJavaScript('document.documentElement.inert=false');dialog.showErrorBox('Companion could not close',error.message);}).finally(()=>{checking=false;});
+    (async()=>{await tool.window.webContents.executeJavaScript('document.documentElement.inert=true');await tool.prepareClose();await tool.dispose();await lease.release();quitting=true;app.quit();})().catch(async error=>{tool.resume();let detail=error.message;try{if(!tool.window.isDestroyed())await tool.window.webContents.executeJavaScript('document.documentElement.inert=false');}catch(restoreError){detail+=' Window recovery failed: '+restoreError.message;}dialog.showErrorBox('Companion could not close',detail);}).finally(()=>{checking=false;});
   });
   return tool;
 }
