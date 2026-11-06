@@ -17,6 +17,13 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci --no-audit --no-fund
+      - name: Reproduce the failing hosted display size
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') { throw 'Use a disposable hosted Windows job.' }
+          Get-Command Set-DisplayResolution -ErrorAction Stop | Out-Null
+          Set-DisplayResolution -Width 1024 -Height 768 -Force
       - run: npm run test:computer
       - uses: actions/upload-artifact@v4
         if: always()
