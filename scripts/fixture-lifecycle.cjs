@@ -71,7 +71,17 @@ async function verifyStopped(owned) {
     try {
       process.kill(owned.pid, 0);
     } catch (error) {
-      if (error.code !== "ESRCH") throw error;
+      if (process.platform === "win32" && error.code === "EPERM") {
+        // A denied signal probe is inconclusive; require independent process-table absence.
+        const found = execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+          `$ErrorActionPreference='Stop'; @(Get-CimInstance Win32_Process -Filter 'ProcessId = ${Number(owned.pid)}').Count`,
+        ], { encoding: "utf8", timeout: 15000 }).trim();
+        assert.match(found, /^\d+$/, "Inspect the invalid Windows process-table response before claiming cleanup.");
+        if (Number(found) !== 0) {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+          continue;
+        }
+      } else if (error.code !== "ESRCH") throw error;
       alive = false;
       break;
     }
