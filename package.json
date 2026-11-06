@@ -16,7 +16,10 @@
     "package:dir": "electron-builder --dir --publish never",
     "test:tools": "node scripts/tool-inference-test.cjs",
     "test:computer": "node scripts/computer-test.cjs",
-    "test:packaged": "node scripts/packaged-test.cjs"
+    "test:packaged": "node scripts/packaged-test.cjs",
+    "package:release": "node scripts/release.cjs",
+    "test:signatures": "node scripts/verify-mac-signing.mjs",
+    "test:upgrade": "node scripts/upgrade-test.cjs"
   },
   "dependencies": {
     "@nut-tree-fork/nut-js": "4.2.6",
@@ -32,7 +35,8 @@
   "devDependencies": {
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
-    "playwright": "1.64.1"
+    "playwright": "1.64.1",
+    "js-yaml": "4.3.2"
   },
   "build": {
     "appId": "com.matiq.companion",

@@ -396,6 +396,15 @@ app
       return request(name, args);
     });
     await window.loadFile(path.join(__dirname, "ui/index.html"));
+    if (
+      process.env.COMPANION_TEST_PROFILE &&
+      process.env.COMPANION_UPGRADE_TEST === "1"
+    ) {
+      await atomicJSON(path.join(dir, "upgrade-launch.json"), {
+        version: app.getVersion(),
+        pid: process.pid,
+      });
+    }
   })
   .catch((e) => {
     dialog.showErrorBox("MatiQ Companion could not start", e.message);
