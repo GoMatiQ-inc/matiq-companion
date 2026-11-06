@@ -423,6 +423,22 @@ async function bundleVersion(apps) {
       processes: [...processesIn(ownedApplication), ...processesIn(shipIt)],
       logs: {},
     };
+    if(!successful && !windows) {
+      let captureTimer;
+      try {
+        const png=await Promise.race([
+          app.evaluate(async({desktopCapturer,screen})=>{const d=screen.getPrimaryDisplay();const sources=await desktopCapturer.getSources({types:['screen'],thumbnailSize:{width:d.size.width,height:d.size.height}});return sources.find(s=>s.display_id===String(d.id)).thumbnail.toPNG().toString('base64');}),
+          new Promise((_,reject)=>{captureTimer=setTimeout(()=>reject(Error('Native update desktop capture timed out.')),10000);})
+        ]);
+        await fs.mkdir(path.join(root,'.validation'),{recursive:true});
+        await fs.writeFile(path.join(root,'.validation','upgrade-desktop.png'),Buffer.from(png,'base64'));
+      } catch(error) {diagnostic.captureError=error.message;console.error('Upgrade capture diagnostic:',error.message);}
+      finally {clearTimeout(captureTimer);}
+      try {
+        diagnostic.nativeSystemLog=execFileSync('/usr/bin/log',['show','--last','4m','--style','compact','--predicate','process == "ShipIt" OR process == "SecurityAgent" OR subsystem BEGINSWITH "com.github.Squirrel"'],{encoding:'utf8',timeout:15000,maxBuffer:1024*1024}).slice(-20000);
+        diagnostic.updaterJobs=execFileSync('/bin/launchctl',['list'],{encoding:'utf8',timeout:10000}).split('\n').filter(line=>/ShipIt|companion/i.test(line));
+      } catch(error) {diagnostic.nativeLogError=error.message;console.error('Upgrade native-log diagnostic:',error.message);}
+    }
     for (const name of ["ShipIt_stderr.log", "ShipIt_stdout.log"]) {
       try {
         diagnostic.logs[name] = (
