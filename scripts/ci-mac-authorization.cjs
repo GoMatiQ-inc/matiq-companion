@@ -1,7 +1,6 @@
 const {execFileSync}=require('node:child_process');
 const {randomBytes}=require('node:crypto');
 const path=require('node:path');
-const {waitFor}=require('./wait-for.cjs');
 const keys=['GITHUB_ACTIONS','RUNNER_ENVIRONMENT','GITHUB_REPOSITORY','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT','RUNNER_TEMP'];
 const args=['-n','/usr/bin/env',...keys.map(key=>key+'='+process.env[key]),'/usr/bin/python3',path.join(__dirname,'ci-mac-authorization.py')];
 const invoke=(operation,data={})=>JSON.parse(execFileSync('/usr/bin/sudo',[...args,operation],{input:JSON.stringify(data),encoding:'utf8',timeout:100000}));
@@ -10,21 +9,19 @@ function createAuthorizationFixture(){
   let identity;
   try {identity=invoke('create',{password});}
   catch(error){invoke('delete');password='';throw error;}
-  const script=path.join(__dirname,'ci-mac-authorization.jxa');
+  const right=operation=>JSON.parse(execFileSync('/usr/bin/python3',[path.join(__dirname,'ci-mac-authorization-right.py')],{input:JSON.stringify({operation,name:identity.name,password:operation==='grant'?password:undefined}),encoding:'utf8',timeout:20000}));
   return {
     identity,
-    async authorize(){
-      await waitFor(()=>{
-        const result=JSON.parse(execFileSync('/usr/bin/osascript',['-l','JavaScript',script],{input:JSON.stringify({name:identity.name,password}),encoding:'utf8',timeout:12000}));
-        if(result.error)throw Error(`Native CI helper authorization failed at ${result.error} (${result.number??'unknown'}); inspect the captured OS dialog.`);
-        if(result.authorizationSubmitted)console.log("Native secure-field length before submission:",result.passwordLength);
-        return result.authorizationSubmitted;
-      },'The normal Companion Add Helper authorization dialog',30000);
-      console.log('Native OS helper authorization was submitted using the owned CI identity.');
+    prepare(){
+      const result=right('grant');
+      if(!result.authorized||!result.wrongPasswordRejected||!result.sessionCredentialVerified)throw Error('The native authorization credential was not qualified.');
+      console.log('PASS: OS authorization rejects the wrong password and accepts the owned CI credential.');
     },
+    async authorize(){console.log('The signed updater must obtain its own right from the authenticated CI session.');},
     close(){
-      const result=invoke('delete');password='';
-      if(!result.accountAbsent||!result.homeAbsent)throw Error('The owned authorization fixture remains.');
+      try {const cleared=right('revoke');if(!cleared.authorizationAbsent)throw Error('The CI authorization remains.');}
+      finally {const result=invoke('delete');password='';
+      if(!result.accountAbsent||!result.homeAbsent)throw Error('The owned authorization fixture remains.');}
       console.log('PASS: the owned authorization identity and home are absent.');
     }
   };
