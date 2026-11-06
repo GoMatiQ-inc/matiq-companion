@@ -355,15 +355,16 @@ async function bundleVersion(apps) {
           info.pid !== handle.pid,
       );
       if (!processInfo) return false;
-      assert.equal(
-        processInfo.uid,
-        windows ? powershell("[Security.Principal.WindowsIdentity]::GetCurrent().User.Value") : process.getuid(),
-        "The new app must run as the same user.",
-      );
       const info = applicationInfo(processInfo.pid);
-      return info.found && info.finished && !info.terminated
-        ? { ...processInfo, version: targetVersion }
-        : false;
+      if (!info.found || !info.finished || info.terminated) return false;
+      const ready = processesIn(ownedApplication).find((item) => item.pid === processInfo.pid);
+      if (!ready) return false;
+      assert.equal(
+        ready.uid,
+        windows ? powershell("[Security.Principal.WindowsIdentity]::GetCurrent().User.Value") : process.getuid(),
+        "The finished app must run as the same user.",
+      );
+      return { ...ready, version: targetVersion };
     }, "Signed replacement and automatic restart");
     assert.equal(
       await fs.realpath(applicationInfo(launch.pid).bundle),
