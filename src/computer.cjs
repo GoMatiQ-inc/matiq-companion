@@ -1,4 +1,4 @@
-const { desktopCapturer, screen } = require("electron");
+const { app, desktopCapturer, screen } = require("electron");
 const { createWorker } = require("tesseract.js");
 const language = require("@tesseract.js-data/eng");
 const { computerAccess } = require("./computer-access.cjs");
@@ -12,6 +12,7 @@ function createComputer(window) {
     if (process.platform === "darwin" && name !== "observe_screen" && access.input !== "granted")
       throw Error("Enable Accessibility for MatiQ Companion in Settings → Computer access before controlling other apps.");
     window.hide();
+    if(process.platform === "darwin") app.hide();
     try {
       await new Promise((r) => setTimeout(r, 350));
       if (signal?.aborted) throw Error("Task stopped.");
@@ -131,6 +132,7 @@ function createComputer(window) {
         note: "Input dispatched. Observe again to verify the outcome; success in the target application is not implied.",
       };
     } finally {
+      if(process.platform === "darwin") app.show();
       window.show();
       window.focus();
     }

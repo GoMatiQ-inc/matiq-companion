@@ -68,3 +68,12 @@ signed upgrade jobs. These paths remain **unqualified until Microsoft issues the
 company certificate profile**; no unsigned installer or self-signed substitute
 is accepted as evidence. Explicit Restart applies downloaded updates silently
 and reopens the app; automatic install-on-quit remains disabled.
+
+Cross-application qualification uses a separate Electron target process, not a
+window owned by Companion. Linux real OCR/input and independent teardown pass.
+The earlier three-platform input evidence used an in-process fixture; it does
+not establish cross-application focus. On Mac, approved computer actions hide
+the application as well as its window, then restore it after input.
+Windows ARM64 diagnostics confirm an interactive WinSta0/Default console
+session; the image's first-boot privacy experience still covers the fixture.
+A temporary read-only UI diagnostic is being used to inspect that CI image.
