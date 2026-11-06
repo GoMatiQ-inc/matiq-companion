@@ -49,12 +49,18 @@ const assert = require("node:assert/strict");
           );
           fixture.show();
           fixture.focus();
+          await fixture.webContents.executeJavaScript('document.fonts.ready.then(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))');
+          await new Promise(resolve => setTimeout(resolve, 300));
           const computer = createComputer(main);
           const signal = new AbortController().signal;
           const observe = () => computer("observe_screen", {}, signal);
           const observed = await observe();
           const target = observed.words.find((word) => /^target$/i.test(word.text));
-          if (!target) throw Error("OCR did not locate the fixture Target label.");
+          if (!target) {
+            const b = fixture.getBounds(), d = screen.getPrimaryDisplay().bounds;
+            const words = observed.words.filter(w => w.x >= b.x-d.x && w.x < b.x-d.x+b.width && w.y >= b.y-d.y && w.y < b.y-d.y+b.height).map(w => w.text);
+            throw Error("OCR did not locate the fixture Target label: " + JSON.stringify({words,bounds:b,display:d,scale:screen.getPrimaryDisplay().scaleFactor}));
+          }
           await computer("click_screen", { x: target.x, y: target.y }, signal);
           if (await fixture.webContents.executeJavaScript('document.activeElement.id') !== "target") throw Error("Native pointer click did not focus the fixture input.");
           let staleRejected = false;
