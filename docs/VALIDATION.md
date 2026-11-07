@@ -69,12 +69,18 @@ A 1024×768 Windows fixture comparison reproduced the OCR string `GENTRY`; label
 
 Native publication proof is bound to the complete Git tree and all four successful named architecture jobs in trusted main history. The real merged run 42288354690 qualifies signed source `dd2cad06d1a4311a9076f1dfac88d00c93d8dc65` because both have tree `68e6511e523f5a611a3d285c6fd188e88a0f3d85`. Regression tests reject changed or unmerged files, forked/failed runs, missing platforms and diagnostic-only jobs.
 
+## Mac mini acceptance follow-up
 
-## Chat-first interface — 0.1.3
+The installed signed 0.1.2 app completed native screen OCR after normal OS grants, but its 18,000-character tool-result prefix overflowed the 4,096-token local model context. The candidate now serializes results against the actual loaded model tokenizer with a 1,024-token result budget. Oversized screen results retain complete text/coordinate triples and explicitly report omitted content; other oversized results carry a labelled excerpt rather than silently cut JSON. Unit checks cover bounds and retained coordinates. The actual Electron worker fixture also requests a large synthetic OCR result and requires a completed worker turn before the existing model lifetime checks. Native qualification and final installed-app acceptance of this candidate remain pending.
+
+The same installed-app acceptance observed that denied native capture prevented the Screen Recording request button from opening System Settings. The candidate opens the normal settings pane even when capture rejects and then reports the capture error with the actual host app name and restart instructions. Focused unit checks cover denial and success; they do not claim an OS grant.
+
+
+## Chat-first interface — 0.1.4
 
 The app opens directly to a centered chat with a bottom composer. Projects are optional and existing project records without a kind remain projects. The plus button selects individual read-only text/DOCX/XLSX attachments; content is extracted locally with live-grant checks and a bounded context. Enter sends exactly once, Shift+Enter adds a line, and IME composition does not submit. Composer permissions retain the existing main-process tool enforcement and per-action approvals.
 
-Linux development validation: 38 unit/security/document/update/icon/attachment tests pass. The actual Electron desktop journey passes with the catalog local model, native picker boundary and selected-file readback, ordinary chat persistence, independent permission toggles, optional project creation, draft preservation, and 1160×820 / 840×620 composer geometry. Owned child processes and captured listeners are absent after cleanup. Native Mac/Windows and signed update qualification are required before release; this paragraph does not claim those pending checks passed.
+Linux development validation: 45 unit/security/document/update/icon/attachment tests pass. The actual Electron desktop journey passes with the catalog local model, native picker boundary and selected-file readback, ordinary chat persistence, independent permission toggles, optional project creation, draft preservation, and 1160×820 / 840×620 composer geometry. Owned child processes and captured listeners are absent after cleanup. Native Mac/Windows and signed update qualification are required before release; this paragraph does not claim those pending checks passed.
 
 The app icon uses the existing MatiQ branding repository app-icon.svg mark. Committed PNG, multi-size ICNS and ICO resources replace the Electron fallback. Regenerate with npm run icons:build on a qualified desktop build host.
 
@@ -85,3 +91,5 @@ Run 42349412533 completed Windows x64 chat, attachment, optional-project and per
 The controlled negative desktop fixture (COMPANION_FIXTURE_FAIL_WITH_DRAFT=1) failed intentionally with an unsent draft, bounded normal close at ten seconds, stopped only its original child handle and independently verified all captured processes/listeners absent. It retained a nonzero exit and completed in 11.1 seconds. The normal real-model desktop journey also passes.
 
 Run 42350170617 passed Apple Silicon and Windows ARM64 completely. Intel failed an initial compositor screenshot before the desktop journey; the fixture now waits two animation frames before that first capture. Packaged Windows x64 exposed a concurrent state query observing a newly created folder before project.json publication. Creation now stages the complete conversation directory and atomically publishes it; reads wait for queued permission commits. New tests cover both concurrency guarantees. Cleanup records process creation identities before close and refuses to signal replacement PIDs; it safely stops remaining matching captured children and independently verifies all children and listeners absent. The revised controlled negative fixture remains nonzero with verified cleanup in 11.3 seconds. Native qualification is pending for this corrected source.
+
+This 0.1.4 candidate integrates main 6707e57, preserving its structured tool-result token budgeting and denied-capture settings behavior. All 45 combined local unit tests and the actual local-model desktop journey pass after integration. Version 0.1.3 remains reserved by the preceding signing attempt; this UI release uses 0.1.4.

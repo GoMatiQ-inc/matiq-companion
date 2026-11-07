@@ -124,7 +124,7 @@ function startWorker() {
           worker.send({
             type: "tool-result",
             id: m.id,
-            result: JSON.stringify(result).slice(0, 18000),
+            result,
           });
         emit({ type: "activity", tool: m.name, status: "completed" });
       } catch (e) {

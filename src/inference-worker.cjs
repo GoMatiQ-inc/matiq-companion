@@ -1,3 +1,4 @@
+const { boundToolResult } = require("./tool-result.cjs");
 let api, llama, model, context, controller, loadedPath, runtimePromise;
 const requests = new Map();
 let sequence = 0;
@@ -15,7 +16,11 @@ process.on("message", async (m) => {
     const p = requests.get(m.id);
     if (p) {
       requests.delete(m.id);
-      m.error ? p.reject(Error(m.error)) : p.resolve(m.result);
+      if (m.error) p.reject(Error(m.error));
+      else {
+        try { p.resolve(boundToolResult(m.result, p.countTokens)); }
+        catch (error) { p.reject(error); }
+      }
     }
     return;
   }
@@ -93,7 +98,10 @@ process.on("message", async (m) => {
           if (controller.signal.aborted) throw Error("Task stopped.");
           const id = ++sequence;
           return new Promise((resolve, reject) => {
-            requests.set(id, { resolve, reject });
+            requests.set(id, {
+              resolve, reject,
+              countTokens: result => session.chatWrapper.generateFunctionCallResult(d.name, args, result).tokenize(model.tokenizer).length,
+            });
             send({ type: "tool", id, name: d.name, args });
           });
         },
