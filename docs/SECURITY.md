@@ -2,7 +2,9 @@
 
 The renderer has no Node integration and uses context isolation, sandboxing, a restrictive CSP, plain-text output and a narrow preload API. Main-frame IPC checks reject unrelated senders. Navigation and new windows are denied. Model inference runs in a separate process; no arbitrary shell/eval tool is exposed.
 
-Tool groups start disabled per project. Native pickers create explicit read or write grants. Project-relative paths stay inside the project's files directory; traversal, NUL and symlink paths are rejected. Broad grants still cannot modify Companion's application/profile/model directories. Tool permissions and grants are checked again after user approval. Overwrites preserve prior bytes in project history.
+Tool groups start disabled per conversation, whether an ordinary chat or an optional project. Native pickers create explicit read or write grants. Project-relative paths stay inside the project's files directory; traversal, NUL and symlink paths are rejected. Broad grants still cannot modify Companion's application/profile/model directories. Tool permissions and grants are checked again after user approval. Overwrites preserve prior bytes in project history.
+
+The composer attachment picker grants read-only access to the explicitly selected files. For a submitted message, selected attachment IDs must still have live grants and pass the same protected-path/symlink checks. Text/Office extraction is bounded; excerpts are labeled. Extracted content stays in the local conversation history and is treated as untrusted input. Attaching a file does not enable broader file tools or write permission. Removing an unsent attachment revokes its grant; removing a grant cannot erase contents already included in earlier messages.
 
 Every write, move, Office mutation, network request and computer action needs approval. A turn has a three-minute limit and twelve-tool budget; approval expires after two minutes. Stop cancels pending approvals and inference. Activity receipts are local; generated content and prior versions can consume disk and may contain private data.
 

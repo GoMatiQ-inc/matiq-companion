@@ -32,3 +32,28 @@ test('denied Windows probes require independent process absence and free capture
   await assert.rejects(fixture([Error('CIM unavailable')]).verify(), /CIM unavailable/);
   await assert.rejects(fixture(['0'], 'TCP 127.0.0.1:4321 0.0.0.0:0 LISTENING 5678').verify(), /listener remains occupied/);
 });
+
+test('owned cleanup refuses a replacement PID and stops only a matching captured identity', async () => {
+  for (const replacement of [true, false]) {
+    let alive = true;
+    const signals = [], context = {
+      module: {exports: {}},
+      process: {platform: 'win32', kill(_pid, signal) {
+        if (signal === 0) {if (!alive) throw Object.assign(Error('gone'), {code:'ESRCH'});return;}
+        signals.push(signal);alive=false;
+      }},
+      console: {log() {}, error() {}},
+      setTimeout: resolve => resolve(),
+      require(name) {
+        if (name !== 'node:child_process') return require(name);
+        return {execFileSync(command) {
+          return command === 'netstat' ? '' : JSON.stringify({rows:[{pid:1234,parent:1,identity:replacement?'different':'captured'}]});
+        }};
+      },
+    };
+    vm.runInNewContext(fs.readFileSync(require.resolve('../scripts/fixture-lifecycle.cjs'),'utf8'),context);
+    const stop = context.module.exports.stopOwned({pid:1234,ports:[],identity:'captured'});
+    if(replacement) {await assert.rejects(stop,/identity changed/);assert.deepEqual(signals,[]);}
+    else {await stop;assert.deepEqual(signals,['SIGTERM']);}
+  }
+});

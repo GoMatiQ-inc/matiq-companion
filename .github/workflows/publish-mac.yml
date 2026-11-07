@@ -110,13 +110,15 @@ jobs:
           windows_note='Windows x64 and ARM64 installers passed company Authenticode, timestamp, native architecture and real per-user signed upgrade checks.' if windows else 'Signed Windows distribution remains unavailable until Microsoft approves the company identity and issues its certificate profile.'
           notes=f"""MatiQ Companion {version} — {label}
 
+          Opens directly to centered chat with optional projects. **Enter** sends, **Shift+Enter** adds a line, and the composer includes file attachments and independent tool permissions. Native MatiQ icon resources replace the Electron fallback. Attachments support UTF-8 text, DOCX and XLSX; PDF/images are not supported by the text models.
+
           Download **mac-arm64.pkg** for Apple Silicon or **mac-x64.pkg** for Intel; requires macOS 14.2 or later. Local models download separately during setup.
 
           Both Mac architectures passed native inference, document tools, separate-application OCR/pointer/Unicode/key input, packaged worker reloads, Developer ID signing, notarization, stapling and Gatekeeper checks. Actual system-PKG download/restart qualification retained projects, settings, generated files and model hashes. The previous public Mac version upgraded into these exact candidate bytes.
 
           {windows_note}
 
-          [Verified signing and installed upgrades]({run['html_url']}); source `{sha}`. [Four-platform native CI]({native_proof['html_url']}) verified the identical complete Git tree `{source_tree}`. Computer actions require per-project enablement and individual approval; Mac also requires Screen Recording and Accessibility access. Voice model sharing requires Voice 0.3.9 or later; speech and chat models remain distinct.
+          [Verified signing and installed upgrades]({run['html_url']}); source `{sha}`. [Four-platform native CI]({native_proof['html_url']}) verified the identical complete Git tree `{source_tree}`. Computer actions require per-conversation enablement and individual approval; Mac also requires Screen Recording and Accessibility access. Voice model sharing requires Voice 0.3.9 or later; speech and chat models remain distinct.
 
           Free personal and internal business use under the [MatiQ Companion No-Sale License](https://github.com/{repo}/blob/{sha}/LICENSE). Third-party code and model weights retain their licenses.
           """

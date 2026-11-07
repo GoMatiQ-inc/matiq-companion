@@ -77,6 +77,7 @@ jobs:
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - run: npm run test:desktop
+        timeout-minutes: 6
         env:
           COMPANION_VALIDATION_MODELS: ${{ runner.temp }}/companion-models
       - name: Inspect native Windows desktop session
@@ -100,6 +101,7 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/companion-*.png
             .validation/desktop-*-failure.*
             .validation/worker-lifetimes-*.json
             .validation/computer-*.json

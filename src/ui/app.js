@@ -12,7 +12,11 @@ let snapshot,
   approval = null,
   live = "",
   activity = [],
-  updateState = null;
+  updateState = null,
+  draft = "",
+  attachments = [],
+  submitting = false,
+  creatingChat = null;
 async function call(name, args) {
   try {
     $("#error").hidden = true;
@@ -26,7 +30,9 @@ async function call(name, args) {
 const run = (fn) => () =>
   Promise.resolve()
     .then(fn)
-    .catch(() => {});
+    .catch(error => {
+      $("#error").hidden = false; $("#error").textContent = error.message;
+    });
 function button(label, fn, primary = false) {
   const b = el("button", label, primary ? "primary" : "");
   b.type = "button";
@@ -64,28 +70,116 @@ async function refresh() {
 }
 async function openProject(id) {
   project = await call("project.open", { id });
+  $("#message") && ($("#message").value = "");
+  draft = "";
+  attachments = [];
   live = "";
   activity = [];
   view = "chat";
   render();
 }
+async function ensureChat() {
+  if (project) return project;
+  if (!creatingChat) creatingChat = call("chat.create").then(async chat => {
+    project = chat; snapshot = await call("state"); return chat;
+  }).finally(() => {creatingChat = null;});
+  return creatingChat;
+}
+function newChat() {
+  if (snapshot.busy || submitting || creatingChat) throw Error("Stop the current response before starting a new chat.");
+  if ($("#message")) $("#message").value = "";
+  project = null; draft = ""; attachments = []; live = ""; activity = []; view = "chat"; render();
+  $("#message")?.focus();
+}
 function navigate(next) {
   view = next;
   render();
 }
+function permissionRows(container) {
+    for (const [id, title, note] of [
+      [
+        "files",
+        "Files",
+        "Read granted locations; create, modify and move files after approval. Files generated in this conversation are the default scope.",
+      ],
+      [
+        "documents",
+        "Word and Excel",
+        "Create DOCX/XLSX files, read documents and edit paragraphs or cells. Existing files are backed up before replacement.",
+      ],
+      [
+        "search",
+        "Internet search",
+        "Allow public HTTPS search and page reading. Queries and URLs are shown before transmission; downloaded model files are separate.",
+      ],
+      [
+        "computer",
+        "Computer use",
+        "Read the primary screen with local OCR and dispatch approved clicks or typing. Computer use can affect apps and files outside your file grants. Companion hides while observing or acting.",
+      ],
+    ]) {
+      const box = el("div", undefined, "row"),
+        label = el("label", undefined, "check"),
+        check = el("input");
+      check.type = "checkbox";
+      check.checked = project?.tools[id] || false;
+      check.setAttribute("aria-label", title);
+      let projectId;
+      check.onchange = run(async () => {
+        const enabled = check.checked;
+        projectId = (await ensureChat()).id;
+        check.disabled = true;
+        try {
+          const updated = await call("project.policy", {
+            id: projectId,
+            tool: id,
+            enabled,
+          });
+          if (project?.id === projectId) {project = updated; $("#privacy").textContent = project.tools.search ? "Web access enabled" : "Local processing";}
+        } catch (error) {
+          check.checked = !enabled;
+          throw error;
+        } finally {
+          check.disabled = false;
+        }
+      });
+      const words = el("span");
+      words.append(el("strong", title), el("small", note));
+      label.append(check, words);
+      box.append(label);
+      container.append(box);
+    }
+}
 function render() {
+  const currentDraft = $("#message");
+  if (currentDraft) draft = currentDraft.value;
+  $("#content").dataset.hasDraft = String(Boolean(draft.trim() || attachments.length));
+  document.body.classList.toggle("chat-view", view === "chat");
   const nav = $("#nav");
   nav.replaceChildren();
+  const fresh = button("+  New chat", newChat);
+  fresh.setAttribute("aria-label", "New chat");
+  fresh.disabled = snapshot.busy || submitting;
+  nav.append(fresh);
   for (const [id, label] of [
     ["chat", "Chat"],
     ["projects", "Projects"],
     ["models", "Models"],
-    ["files", "File access"],
-    ["tools", "Tools"],
   ]) {
     const b = button(label, () => navigate(id));
     if (view === id) b.classList.add("active");
     nav.append(b);
+  }
+  const chats = snapshot.projects.filter(p => p.kind === "chat");
+  if (chats.length) {
+    nav.append(el("span", "Recent chats", "nav-label"));
+    for (const chat of chats.slice(0, 20)) {
+      const item = button(chat.name, () => openProject(chat.id));
+      item.className = "chat-history" + (project?.id === chat.id ? " active" : "");
+      item.title = chat.name;
+      item.setAttribute("aria-label", "Open chat: " + chat.name);
+      nav.append(item);
+    }
   }
   $("#settings-nav").onclick = () => navigate("settings");
   $("#setup-nav").onclick = () => navigate("models");
@@ -125,7 +219,7 @@ function render() {
         true,
       ),
     );
-    for (const p of snapshot.projects) {
+    for (const p of snapshot.projects.filter(p => p.kind !== "chat")) {
       const row = el("div", undefined, "row");
       row.append(
         el("strong", p.name),
@@ -271,87 +365,25 @@ function render() {
     );
     return;
   }
-  if (!project) {
-    root.append(
-      heading(
-        "Your own AI workspace.",
-        "Choose a local model, create a project, and decide what Companion can access.",
-      ),
-    );
-    root.append(
-      actions(
-        button("Create a project", () => navigate("projects"), true),
-        button("Choose a model", () => navigate("models")),
-      ),
-    );
+  if (!project && view !== "chat") {
+    root.append(heading("Choose a conversation", "Open a chat or project to manage its access."));
     return;
   }
   if (view === "tools") {
     root.append(
       heading(
         "Tools you control.",
-        "Each project has its own permissions. File changes, web requests and every computer action require your approval.",
+        "Each conversation has its own permissions. File changes, web requests and every computer action require your approval.",
       ),
     );
-    for (const [id, title, note] of [
-      [
-        "files",
-        "Files",
-        "Read granted locations; create, modify and move files after approval. Project files are the default scope.",
-      ],
-      [
-        "documents",
-        "Word and Excel",
-        "Create DOCX/XLSX files, read documents and edit paragraphs or cells. Existing files are backed up before replacement.",
-      ],
-      [
-        "search",
-        "Internet search",
-        "Allow public HTTPS search and page reading. Queries and URLs are shown before transmission; downloaded model files are separate.",
-      ],
-      [
-        "computer",
-        "Computer use",
-        "Read the primary screen with local OCR and dispatch approved clicks or typing. Computer use can affect apps and files outside your file grants. Companion hides while observing or acting.",
-      ],
-    ]) {
-      const box = el("div", undefined, "row"),
-        label = el("label", undefined, "check"),
-        check = el("input");
-      check.type = "checkbox";
-      check.checked = project.tools[id];
-      check.setAttribute("aria-label", title);
-      const projectId = project.id;
-      check.onchange = run(async () => {
-        const enabled = check.checked;
-        check.disabled = true;
-        try {
-          const updated = await call("project.policy", {
-            id: projectId,
-            tool: id,
-            enabled,
-          });
-          if (project?.id === projectId) project = updated;
-        } catch (error) {
-          check.checked = !enabled;
-          throw error;
-        } finally {
-          check.disabled = false;
-        }
-      });
-      const words = el("span");
-      words.append(el("strong", title), el("small", note));
-      label.append(check, words);
-      box.append(label);
-      root.append(box);
-    }
+    permissionRows(root);
     return;
   }
   if (view === "files") {
     root.append(
       heading(
         "Choose what Companion can access.",
-        "New files stay inside this project. Grant additional files or folders explicitly; read and write access are separate.",
+        "New files stay with this conversation. Grant additional files or folders explicitly; read and write access are separate.",
       ),
     );
     root.append(
@@ -372,7 +404,7 @@ function render() {
           project = await call("grant.add", { id: project.id, mode: "write" });
           render();
         }),
-        button("Show project files", () =>
+        button("Show conversation files", () =>
           call("files.open", { id: project.id }),
         ),
       ),
@@ -394,7 +426,7 @@ function render() {
       root.append(row);
     }
     const listing = el("div", undefined, "panel");
-    listing.append(el("h2", "Project files"));
+    listing.append(el("h2", project.kind === "chat" ? "Chat files" : "Project files"));
     root.append(listing);
     call("files.list", { id: project.id })
       .then((value) => {
@@ -409,74 +441,103 @@ function render() {
       .catch(() => {});
     return;
   }
-  root.append(
-    heading(
-      "Think, write and make things.",
-      "Chat runs on this device. Enable only the tools this project needs.",
-    ),
-  );
-  const top = actions(
-    button("Project files", () => navigate("files")),
-    button("Manage tools", () => navigate("tools")),
-  );
-  root.append(top);
+  const layout = el("section", undefined, "chat-layout");
   const messages = el("div", undefined, "messages");
   messages.id = "messages";
-  for (const m of project.messages) {
-    const box = el(
-      "article",
-      undefined,
-      "message " + m.role + (m.status === "interrupted" ? " interrupted" : ""),
-    );
-    box.append(
-      el("strong", m.role === "user" ? "You" : "Companion"),
-      el("div", m.text),
-    );
+  messages.setAttribute("aria-label", "Conversation");
+  const empty = !project?.messages.length && !snapshot.busy;
+  layout.classList.toggle("empty-chat", empty);
+  if (empty) {
+    const welcome = heading("What can I help you with?", "Your ideas. Your files. On your device.");
+    welcome.className = "chat-welcome";
+    messages.append(welcome);
+  }
+  for (const m of project?.messages || []) {
+    const box = el("article", undefined, "message " + m.role + (m.status === "interrupted" ? " interrupted" : ""));
+    box.append(el("strong", m.role === "user" ? "You" : "Companion"), el("div", m.role === "assistant" ? m.text.replace(/^[\r\n]+/, "") : (m.displayText || m.text)));
+    if (m.attachments?.length) box.append(el("small", m.attachments.map(a => a.name + (a.truncated ? " (excerpt)" : "")).join(", "), "message-files"));
     if (m.error) box.append(el("p", m.error, "error"));
     messages.append(box);
   }
   const pending = el("article", undefined, "message assistant");
-  pending.id = "live-message";
-  pending.hidden = !snapshot.busy;
-  pending.textContent = live || "Loading local model…";
+  pending.id = "live-message"; pending.hidden = !snapshot.busy;
+  pending.textContent = live || "Thinking on your device…";
   messages.append(pending);
-  root.append(messages);
-  const form = el("form", undefined, "composer"),
-    text = el("textarea");
-  text.id = "message";
-  text.placeholder =
-    "Ask Companion. Describe a file you want to create, or ask a question.";
+  layout.append(messages);
+  const dock = el("div", undefined, "composer-dock");
+  const form = el("form", undefined, "composer"), text = el("textarea");
+  text.id = "message"; text.value = draft; text.rows = 2;
+  text.placeholder = "Message Companion…";
   text.setAttribute("aria-label", "Message Companion");
-  const send = el("button", "Send", "primary");
-  send.type = "submit";
-  send.disabled = snapshot.busy;
-  form.append(
-    text,
-    actions(
-      el(
-        "span",
-        snapshot.busy ? "Working locally…" : "Project: " + project.name,
-        "caption",
-      ),
-      button("Stop", () => call("chat.cancel")),
-      send,
-    ),
-  );
-  form.onsubmit = (e) => {
+  text.oninput = () => {draft = text.value; $("#content").dataset.hasDraft = String(Boolean(draft.trim() || attachments.length)); text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 180) + "px";};
+  text.onkeydown = e => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
+      e.preventDefault();
+      if (!snapshot.busy && !submitting) form.requestSubmit();
+    }
+  };
+  const selected = el("div", undefined, "attachments");
+  for (const a of attachments) {
+    const chip = el("span", undefined, "attachment");
+    chip.append(el("span", a.name), button("×", async () => {
+      project = await call("grant.remove", {id: project.id, grant: a.id});
+      attachments = attachments.filter(x => x.id !== a.id); render();
+    }));
+    chip.lastChild.setAttribute("aria-label", "Remove attachment " + a.name);
+    selected.append(chip);
+  }
+  form.append(selected, text);
+  const controls = el("div", undefined, "composer-controls");
+  const plus = button("+", async () => {
+    plus.disabled = true;
+    try {
+      const chat = await ensureChat();
+      const result = await call("chat.attach", {id: chat.id});
+      project = result.project;
+      attachments.push(...result.attachments);
+      render(); $("#message")?.focus();
+    } finally {plus.disabled = false;}
+  });
+  plus.className = "attach-button"; plus.title = "Attach text, Word or Excel files";
+  plus.setAttribute("aria-label", "Attach files");
+  const permissions = el("details", undefined, "permissions-menu"), summary = el("summary", "Permissions");
+  summary.setAttribute("aria-label", "Permissions");
+  const menu = el("div", undefined, "permissions-panel");
+  menu.append(el("strong", "Tools for this conversation"), el("p", "Selected files are read for your message. Tools control additional actions.", "caption"));
+  permissionRows(menu);
+  menu.append(button("Manage file access", async () => {await ensureChat(); navigate("files");}));
+  permissions.append(summary, menu);
+  const model = button(snapshot.models.find(m => m.id === snapshot.settings.model)?.name || "Choose a model", () => navigate("models"));
+  model.className = "model-choice";
+  const send = el("button", "↑", "primary send-button");
+  send.type = "submit"; send.setAttribute("aria-label", "Send"); send.title = "Send message (Enter)";
+  send.disabled = snapshot.busy || submitting;
+  controls.append(plus, permissions, model);
+  if (snapshot.busy) controls.append(button("Stop", () => call("chat.cancel")));
+  controls.append(send); form.append(controls);
+  form.onsubmit = e => {
     e.preventDefault();
+    if (snapshot.busy || submitting || !text.value.trim()) return;
+    submitting = true; send.disabled = true;
     run(async () => {
-      await call("chat.send", { id: project.id, text: text.value });
-      text.value = "";
-      snapshot.busy = true;
-      live = "";
-      render();
+      try {
+        const chat = await ensureChat();
+        await call("chat.send", {id: chat.id, text: text.value, attachments: attachments.map(a => a.id)});
+        text.value = ""; draft = ""; attachments = []; live = ""; snapshot.busy = true;
+        snapshot = await call("state");
+        project = await call("project.open", {id: chat.id});
+        render(); $("#message")?.focus();
+      } finally {
+        submitting = false;
+        if ($("#message")) $("#message").closest("form").querySelector('[aria-label="Send"]').disabled = snapshot.busy;
+      }
     })();
   };
-  root.append(form);
-  const log = el("div", activity.join("\n"), "activity");
-  log.id = "activity";
-  root.append(log);
+  dock.append(form, el("p", "Enter to send · Shift+Enter for a new line", "composer-hint"));
+  const log = el("div", activity.join("\n"), "activity"); log.id = "activity"; dock.append(log);
+  layout.append(dock); root.append(layout);
   messages.scrollTop = messages.scrollHeight;
+
 }
 api.onEvent((event) => {
   if (event.type === "chunk") {

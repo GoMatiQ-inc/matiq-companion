@@ -44,25 +44,33 @@ function listeners() {
         : [];
     });
 }
+function processRows() {
+  if (process.platform === "win32")
+    return JSON.parse(execFileSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command",
+      "$ErrorActionPreference='Stop';@{rows=@(Get-CimInstance Win32_Process | ForEach-Object {$identity=$null;if($_.CreationDate){$identity=$_.CreationDate.ToUniversalTime().ToString('o')+'|'+[string]$_.ExecutablePath};@{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId;identity=$identity}})} | ConvertTo-Json -Depth 3 -Compress",
+    ], {encoding:"utf8",timeout:15000})).rows;
+  return execFileSync("/bin/ps", ["-axo","pid=,ppid=,uid=,lstart=,comm="], {encoding:"utf8",timeout:15000})
+    .split("\n").flatMap(line => {
+      const m = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
+      return m ? [{pid:Number(m[1]),parent:Number(m[2]),identity:m[3]}] : [];
+    });
+}
 function capture(child) {
-  return {
-    pid: child.pid,
-    ports: listeners()
-      .filter((row) => row.pid === child.pid)
-      .map((row) => row.port),
-  };
+  return {pid:child.pid,identity:processRows().find(row=>row.pid===child.pid)?.identity,
+    ports:listeners().filter(row=>row.pid===child.pid).map(row=>row.port)};
 }
 function captureTree(owned) {
   if(!owned)return [];
   try {
-  const rows=process.platform==='win32'
-    ? JSON.parse(execFileSync('powershell.exe',['-NoProfile','-NonInteractive','-Command',"$ErrorActionPreference='Stop';@{rows=@(Get-CimInstance Win32_Process | ForEach-Object {@{pid=[int]$_.ProcessId;parent=[int]$_.ParentProcessId}})} | ConvertTo-Json -Depth 3 -Compress"],{encoding:'utf8',timeout:15000})).rows
-    : execFileSync('/bin/ps',['-axo','pid=,ppid='],{encoding:'utf8',timeout:15000}).split('\n').flatMap(line=>{const m=/^\s*(\d+)\s+(\d+)\s*$/.exec(line);return m?[{pid:Number(m[1]),parent:Number(m[2])}]:[];});
-  const pids=new Set([owned.pid]);let changed=true;
-  while(changed){changed=false;for(const row of rows)if(pids.has(row.parent)&&!pids.has(row.pid)){pids.add(row.pid);changed=true;}}
-  const ports=listeners();
-  return [...pids].map(pid=>({pid,ports:[...new Set([...(pid===owned.pid?owned.ports:[]),...ports.filter(row=>row.pid===pid).map(row=>row.port)])]}));
-  } catch(error){return [{...owned,inspectionError:error}];}
+    const rows=processRows(),root=rows.find(row=>row.pid===owned.pid);
+    if(root && owned.identity && root.identity!==owned.identity)
+      throw Error("The captured root process identity changed; leave its replacement untouched.");
+    const pids=new Set([owned.pid]);let changed=true;
+    while(changed){changed=false;for(const row of rows)if(pids.has(row.parent)&&!pids.has(row.pid)){pids.add(row.pid);changed=true;}}
+    const ports=listeners();
+    return [...pids].map(pid=>({pid,identity:pid===owned.pid?owned.identity:rows.find(row=>row.pid===pid)?.identity,
+      ports:[...new Set([...(pid===owned.pid?owned.ports:[]),...ports.filter(row=>row.pid===pid).map(row=>row.port)])]}));
+  }catch(error){return [{...owned,inspectionError:error}];}
 }
 async function verifyStopped(owned) {
   if (!owned) return;
@@ -105,4 +113,16 @@ async function verifyStopped(owned) {
     `PASS: owned desktop process exited and ${owned.ports.length} captured listeners are absent.`,
   );
 }
-module.exports = { capture, captureTree, verifyStopped };
+async function stopOwned(owned) {
+  try { await verifyStopped(owned); return; }
+  catch(error) {console.error("Owned process needs identity-checked cleanup:",owned.pid,error.message);}
+  for(const signal of ["SIGTERM","SIGKILL"]) {
+    const current=processRows().find(row=>row.pid===owned.pid);
+    if(!current){await verifyStopped(owned);return;}
+    assert.ok(owned.identity && current.identity===owned.identity,
+      "The captured process identity changed; leave the unknown process untouched.");
+    try {process.kill(owned.pid,signal);}catch(error){if(error.code!=="ESRCH")throw error;}
+    try {await verifyStopped(owned);return;}catch(error){if(signal==="SIGKILL")throw error;}
+  }
+}
+module.exports = { capture, captureTree, verifyStopped, stopOwned };

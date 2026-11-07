@@ -281,7 +281,7 @@ async function bundleVersion(apps) {
       "Qualification must use the real default user-data location.",
     );
     await page
-      .getByRole("heading", { name: "Your own AI workspace." })
+      .getByRole("heading", { name: /Your own AI workspace\.|What can I help you with\?/ })
       .waitFor();
     const project = await page.evaluate(() =>
       window.companion.call("project.create", { name: "Upgrade preservation" }),
