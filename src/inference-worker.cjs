@@ -18,7 +18,7 @@ process.on("message", async (m) => {
       requests.delete(m.id);
       if (m.error) p.reject(Error(m.error));
       else {
-        try { p.resolve(boundToolResult(m.result, text => model.tokenize(text))); }
+        try { p.resolve(boundToolResult(m.result, p.countTokens)); }
         catch (error) { p.reject(error); }
       }
     }
@@ -98,7 +98,10 @@ process.on("message", async (m) => {
           if (controller.signal.aborted) throw Error("Task stopped.");
           const id = ++sequence;
           return new Promise((resolve, reject) => {
-            requests.set(id, { resolve, reject });
+            requests.set(id, {
+              resolve, reject,
+              countTokens: result => session.chatWrapper.generateFunctionCallResult(d.name, args, result).tokenize(model.tokenizer).length,
+            });
             send({ type: "tool", id, name: d.name, args });
           });
         },
