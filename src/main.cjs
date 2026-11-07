@@ -384,7 +384,7 @@ function cancel() {
       projects,
       approve,
       computer: createComputer(window),
-      protectedRoots: [app.getAppPath(), models.root, ...(host?.protectedRoots || [])],
+      protectedRoots: [app.getAppPath(), models.root, path.join(app.getPath("appData"),"MatiQ Solutions","tool-locks"), ...(host?.protectedRoots || [])],
     });
     updates = host ? {
       state: {status: 'suite',version:host.manifest.version,message:'Manage this tool in MatiQ Solutions → Downloads & updates.'},
