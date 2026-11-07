@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "id": "com.matiq.companion",
+  "name": "MatiQ Companion",
+  "workspace": "src/ui/index.html",
+  "roots": [
+    "src/ui"
+  ],
+  "bridge": "prototype/bridge.js",
+  "overrides": {},
+  "baselineVersion": "0.1.5"
+}

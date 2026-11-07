@@ -7,3 +7,9 @@ dist/
 src/native/*.node
 
 .native-build/
+
+# Generated prototypes and machine-specific checkout registration
+.prototype/
+prototype/tools.local.json
+prototype/registration.local.json
+prototype/last-build.local.json
