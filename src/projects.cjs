@@ -3,10 +3,21 @@ const path = require("node:path");
 const { randomUUID } = require("node:crypto");
 async function atomicJSON(file, value) {
   const tmp = file + "." + randomUUID() + ".tmp";
-  await fs.writeFile(tmp, JSON.stringify(value, null, 2) + "\n", {
-    mode: 0o600,
-  });
-  await fs.rename(tmp, file);
+  try {
+    await fs.writeFile(tmp, JSON.stringify(value, null, 2) + "\n", {mode: 0o600});
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fs.rename(tmp, file);
+        break;
+      } catch (error) {
+        // Windows scanners can briefly hold a file without allowing replacement.
+        if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(error.code) || attempt >= 40) throw error;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+    }
+  } finally {
+    await fs.rm(tmp, {force: true});
+  }
 }
 class Projects {
   constructor(root) {

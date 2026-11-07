@@ -1,4 +1,5 @@
 const lifecycle = require("./fixture-lifecycle.cjs");
+const {cleanupDesktop} = require("@matiq-solutions/sdk/fixture-cleanup.cjs");
 const { waitFor } = require("./wait-for.cjs");
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
@@ -28,7 +29,7 @@ const assert = require("node:assert/strict");
       );
     }
   }
-  let app, owned, page, handle;
+  let app, owned, page, handle, writeFixture = false;
   const watchdog = setTimeout(() => {
     handle?.kill("SIGKILL");
     process.exitCode = 1;
@@ -140,6 +141,7 @@ const assert = require("node:assert/strict");
       dialog.showErrorBox=(_title,message)=>{globalThis.fixtureCloseError=message;};
       globalThis.fixtureRestoreWrite=()=>{globalThis.fixtureReleaseWrite?.();fs.rename=rename;dialog.showErrorBox=show;};
     });
+    writeFixture = true;
     const pending=page.evaluate(id=>window.companion.call('project.policy',{id,tool:'documents',enabled:true}),state.projects[0].id);
     await waitFor(()=>app.evaluate(()=>globalThis.fixturePendingWrite),'Pending project write reached its commit',10000);
     await app.evaluate(({app})=>app.quit());
@@ -152,6 +154,7 @@ const assert = require("node:assert/strict");
     console.log('PASS: standalone close waits for a pending project commit and preserves its completed write.');
 
   } catch(error) {
+    console.error("Desktop journey failed:", error);
     if(page) {
       try {
         await fs.mkdir('.validation',{recursive:true});
@@ -161,12 +164,8 @@ const assert = require("node:assert/strict");
     }
     throw error;
   } finally {
-    const tree=lifecycle.captureTree(owned);
-    if(app)await app.evaluate(()=>globalThis.fixtureRestoreWrite?.()).catch(error=>console.error('Write fixture restoration failed:',error.message));
-    await app?.close();
-    for(const process of tree)await lifecycle.verifyStopped(process);
-    clearTimeout(watchdog);
-    await fs.rm(profile, { recursive: true, force: true });
+    if(writeFixture)await app.evaluate(()=>globalThis.fixtureRestoreWrite?.()).catch(error=>console.error('Write fixture restoration failed:',error.message));
+    await cleanupDesktop({app,owned:owned?[owned]:[],temporary:profile,watchdog});
     await fs.rm(selectedRoot, { recursive:true, force:true });
   }
 })().catch((e) => {
