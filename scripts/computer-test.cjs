@@ -13,7 +13,7 @@ const {execFileSync}=require('node:child_process');
     app=await electron.launch({executablePath:process.env.COMPANION_EXECUTABLE_PATH||undefined,args:process.env.COMPANION_EXECUTABLE_PATH?[]:[path.resolve(__dirname,'..')],env:{...process.env,COMPANION_TEST_PROFILE:profile}});
     appHandle=app.process();ownedApp=lifecycle.capture(appHandle);
     const main=await app.firstWindow();
-    await main.getByRole('heading',{name:'Your own AI workspace.'}).waitFor();
+    await main.getByRole('heading',{name:'What can I help you with?'}).waitFor();
     await app.evaluate(({app,BrowserWindow,desktopCapturer,screen})=>{
       // Retain the actual native frame for failure evidence without changing capture results.
       const capture=desktopCapturer.getSources.bind(desktopCapturer);

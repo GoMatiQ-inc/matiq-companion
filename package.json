@@ -1,7 +1,7 @@
 {
   "name": "matiq-companion",
   "productName": "MatiQ Companion",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "A local AI workspace by MatiQ Solutions.",
   "author": "MatiQ Inc",
@@ -22,7 +22,8 @@
     "test:upgrade": "node scripts/upgrade-test.cjs",
     "native:build": "node scripts/build-computer.cjs",
     "tool:package": "node scripts/package-tool.cjs",
-    "test:suite": "node scripts/suite-test.cjs"
+    "test:suite": "node scripts/suite-test.cjs",
+    "icons:build": "electron scripts/build-icons.cjs"
   },
   "dependencies": {
     "@matiq-solutions/runtime": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.3/matiq-solutions-runtime-0.1.3.tgz",
@@ -82,7 +83,8 @@
       },
       "artifactName": "MatiQ-Companion-${version}-mac-${arch}.${ext}",
       "identity": "-",
-      "minimumSystemVersion": "14.2"
+      "minimumSystemVersion": "14.2",
+      "icon": "build/icon.icns"
     },
     "win": {
       "target": [
@@ -91,7 +93,8 @@
       "artifactName": "MatiQ-Companion-${version}-windows-${arch}.${ext}",
       "signtoolOptions": {
         "publisherName": "MatiQ Inc"
-      }
+      },
+      "icon": "build/icon.ico"
     },
     "nsis": {
       "oneClick": false,

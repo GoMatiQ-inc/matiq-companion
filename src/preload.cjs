@@ -14,6 +14,8 @@ const channels = new Set([
   "models.download",
   "models.select",
   "chat.send",
+  "chat.create",
+  "chat.attach",
   "chat.cancel",
   "approval.respond",
   "update.check",

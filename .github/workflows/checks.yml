@@ -100,6 +100,7 @@ jobs:
             dist/*.exe
             dist/*.yml
             dist/*.blockmap
+            .validation/companion-*.png
             .validation/desktop-*-failure.*
             .validation/worker-lifetimes-*.json
             .validation/computer-*.json

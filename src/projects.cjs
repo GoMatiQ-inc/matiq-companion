@@ -17,7 +17,7 @@ class Projects {
     if (!/^[a-f0-9-]{36}$/.test(id)) throw Error("Choose an existing project.");
     return path.join(this.root, id);
   }
-  async create(name) {
+  async create(name, kind = "project") {
     if (typeof name !== "string" || !name.trim() || name.length > 100)
       throw Error("Name the project using 1–100 characters.");
     const id = randomUUID();
@@ -26,6 +26,7 @@ class Projects {
     const p = {
       id,
       name: name.trim(),
+      kind,
       createdAt: new Date().toISOString(),
       tools: { files: false, documents: false, search: false, computer: false },
       grants: [],
@@ -65,7 +66,7 @@ class Projects {
     for (const id of await fs.readdir(this.root)) {
       if (/^[a-f0-9-]{36}$/.test(id)) {
         const p = await this.get(id);
-        out.push({ id: p.id, name: p.name, createdAt: p.createdAt });
+        out.push({ id: p.id, name: p.name, kind: p.kind || "project", createdAt: p.createdAt });
       }
     }
     return out.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

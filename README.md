@@ -1,6 +1,6 @@
 # MatiQ Companion
 
-A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Download a verified model, chat on your own hardware, and choose which tools each project may use.
+A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Download a verified model, chat on your own hardware, and choose which tools each conversation may use.
 
 ## Current status
 
@@ -15,7 +15,9 @@ For later releases, use **Settings → Check for updates → Download update →
 ## Features
 
 - Local Qwen GGUF inference through llama.cpp, with CPU/GPU detection, conservative RAM recommendations, progress and SHA-256 verified model downloads.
-- Persistent projects with one conversation, generated files and independent file, document, web and computer permissions.
+- Open straight into chat. Enter sends, Shift+Enter adds a line, and recent conversations stay in the sidebar. Projects are optional; existing project files and permissions are preserved.
+- Attach text, DOCX and XLSX files with the composer’s plus button. Selected files are read locally for the message, with read-only grants; up to six files and 24,000 characters of extracted context per turn. PDF/image attachments are not supported by the text models.
+- Change file, document, internet and computer tool permissions from the bottom of the composer. Every conversation keeps independent permissions and generated files.
 - Scoped file reading, writing and moving; native pickers grant access to specific files/folders. Mutations require individual approval and preserve overwritten content in project history.
 - Real Word `.docx` creation/paragraph replacement and Excel `.xlsx` creation/cell editing. This is not a full Office editor: rewritten Word paragraphs lose their original inline styling; spreadsheet formulas/macros are not generated.
 - Optional public web search/page reading. Queries and requested pages leave the device only when approved. Public search providers may rate-limit or block requests.

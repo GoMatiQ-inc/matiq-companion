@@ -386,3 +386,57 @@ progress {
     scroll-behavior: auto;
   }
 }
+
+/* The conversation owns the available height; only its message column scrolls. */
+body.chat-view {height:100vh;overflow:hidden}
+.chat-view .workspace {height:100vh;min-height:0}
+.chat-view header {height:64px;flex:none;border-bottom:0;padding:0 32px}
+.chat-view main {min-height:0;display:flex;flex-direction:column;padding:0 28px;overflow:hidden}
+.chat-view #content {flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-view #error {flex:none;margin:0 auto 8px;width:min(100%,780px)}
+.chat-view footer {display:none}
+.chat-layout {width:100%;max-width:780px;align-self:center;flex:1;min-height:0;display:flex;flex-direction:column}
+.chat-layout .messages {flex:1;min-height:0;max-height:none;overflow:auto;margin:0;padding:26px 10px 36px;scrollbar-gutter:stable}
+.chat-welcome {padding-top:clamp(40px,15vh,160px);text-align:center}
+.chat-welcome h1 {font-size:36px;letter-spacing:-.7px}
+.chat-welcome p {font-size:16px;margin-top:14px}
+.chat-layout .message {border:0;padding:22px 0;line-height:1.75}
+.chat-layout .message.user {background:#f3f5f8;border-radius:18px;padding:16px 20px;margin:12px 0 12px auto;max-width:88%;width:fit-content}
+.message-files {display:block;margin-top:10px;color:var(--muted)}
+.composer-dock {flex:none;padding:0 0 14px}
+.chat-layout .composer {border-radius:20px;padding:18px 18px 12px;box-shadow:0 2px 10px #1b1d2108;background:white}
+.chat-layout .composer:focus-within {border-color:#9aaec9;box-shadow:0 0 0 2px #14458f0a}
+.chat-layout .composer textarea {display:block;min-height:64px;max-height:180px;resize:none;padding:0 2px;outline:none;box-shadow:none;font-size:16px}
+.composer-controls {display:flex;align-items:center;gap:8px;margin-top:12px}
+.composer-controls button,.composer-controls summary {border:0;background:transparent;padding:7px 9px;font-size:13px;border-radius:8px;font-weight:400}
+.composer-controls .attach-button {font:28px/1 "Source Sans",sans-serif;width:34px;height:34px;padding:0;color:var(--muted)}
+.composer-controls .model-choice {margin-left:auto;color:var(--muted);max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.composer-controls .send-button {border-radius:50%;width:36px;height:36px;padding:0;background:var(--action);color:white;font-size:24px;line-height:1;flex:none}
+.composer-hint {text-align:center;font-size:12px;color:#68717d;margin:9px 0 0}
+.permissions-menu {position:relative}
+.permissions-menu summary {cursor:pointer;list-style:none;color:var(--muted)}
+.permissions-menu summary::-webkit-details-marker {display:none}
+.permissions-menu summary::after {content:"⌄";margin-left:6px}
+.permissions-panel {position:absolute;bottom:44px;left:-42px;width:360px;max-height:min(500px,70vh);overflow:auto;background:white;border:1px solid var(--rule);border-radius:16px;padding:20px;box-shadow:0 10px 40px #1b1d211a;z-index:5}
+.permissions-panel .row {padding:12px 0}
+.permissions-panel .row:last-of-type {border-bottom:0}
+.permissions-panel .check {gap:10px;margin:0;font-size:14px}
+.permissions-panel .check small {font-size:12px;line-height:1.5}
+.permissions-panel>button {color:var(--action);padding-left:0}
+.attachments {display:flex;gap:8px;flex-wrap:wrap}
+.attachment {display:inline-flex;align-items:center;gap:8px;background:var(--band);border:1px solid var(--rule);border-radius:10px;padding:4px 8px;margin-bottom:12px;font-size:13px;max-width:100%}
+.attachment>span {overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attachment button {border:0;background:none;padding:0 3px;font-size:20px}
+.sidebar #nav {overflow:auto;gap:3px}
+.sidebar #nav>button {padding:9px 12px}
+.sidebar #nav>button:first-child {margin-bottom:14px;border:1px solid var(--rule);background:white}
+.nav-label {font-size:12px;color:var(--muted);padding:22px 12px 8px}
+.sidebar #nav .chat-history {font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400}
+.brand {padding-bottom:26px}
+.brand span {font-size:18px;margin-top:8px;color:var(--muted)}
+.sidebar-bottom {padding-top:12px}
+@media(max-width:960px) {
+ .chat-view main {padding:0 20px}
+ .chat-welcome h1 {font-size:31px}
+ .composer-controls .model-choice {max-width:150px}
+}

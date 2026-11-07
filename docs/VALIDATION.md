@@ -68,3 +68,12 @@ The current production dependency audit reports two moderate findings in ExcelJS
 A 1024×768 Windows fixture comparison reproduced the OCR string `GENTRY`; label spacing did not correct it. A separate native comparison maximized the independent test target, removed unrelated desktop text from the controlled test and passed strict label recognition plus real input/readback. The fixture now fills its work area and records the actual observation frame on failure. This changes the fixture layout, not the application's OCR matching or native input path.
 
 Native publication proof is bound to the complete Git tree and all four successful named architecture jobs in trusted main history. The real merged run 42288354690 qualifies signed source `dd2cad06d1a4311a9076f1dfac88d00c93d8dc65` because both have tree `68e6511e523f5a611a3d285c6fd188e88a0f3d85`. Regression tests reject changed or unmerged files, forked/failed runs, missing platforms and diagnostic-only jobs.
+
+
+## Chat-first interface — 0.1.3
+
+The app opens directly to a centered chat with a bottom composer. Projects are optional and existing project records without a kind remain projects. The plus button selects individual read-only text/DOCX/XLSX attachments; content is extracted locally with live-grant checks and a bounded context. Enter sends exactly once, Shift+Enter adds a line, and IME composition does not submit. Composer permissions retain the existing main-process tool enforcement and per-action approvals.
+
+Linux development validation: 33 unit/security/document/update/icon/attachment tests pass. The actual Electron desktop journey passes with the catalog local model, native picker boundary and selected-file readback, ordinary chat persistence, independent permission toggles, optional project creation, draft preservation, and 1160×820 / 840×620 composer geometry. Owned child processes and captured listeners are absent after cleanup. Native Mac/Windows and signed update qualification are required before release; this paragraph does not claim those pending checks passed.
+
+The app icon uses the existing MatiQ branding repository app-icon.svg mark. Committed PNG, multi-size ICNS and ICO resources replace the Electron fallback. Regenerate with npm run icons:build on a qualified desktop build host.
