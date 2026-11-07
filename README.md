@@ -4,7 +4,7 @@ A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Down
 
 ## Current status
 
-Native development and packaged checks pass on Apple Silicon, Intel Mac, Windows x64 and Windows ARM64, including real local inference, documents and separate-application computer input. Public installers and exact signed-update qualification are listed on the [current release](https://github.com/GoMatiQ-inc/matiq-companion/releases/latest) and in the [validation record](docs/VALIDATION.md). Signed Windows distribution awaits Microsoft company identity validation and an issued certificate profile. Computer use requires explicit project enablement, individual approvals and normal OS privacy permissions.
+Native development and packaged checks pass on Apple Silicon, Intel Mac, Windows x64 and Windows ARM64, including real local inference, documents and separate-application computer input. Public installers and exact signed-update qualification are listed on the [current release](https://github.com/GoMatiQ-inc/matiq-companion/releases/latest) and in the [validation record](docs/VALIDATION.md). Signed Windows distribution awaits Microsoft company identity validation and an issued certificate profile. Computer use requires explicit conversation enablement, individual approvals and normal OS privacy permissions.
 
 ## Install on a Mac
 

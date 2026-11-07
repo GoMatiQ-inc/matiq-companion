@@ -426,7 +426,7 @@ function cancel() {
     return {
       window,
       async status() {
-        const draft = !contents.isDestroyed() && await contents.executeJavaScript("Boolean(document.querySelector('#message')?.value.trim())");
+        const draft = !contents.isDestroyed() && await contents.executeJavaScript("Boolean(document.querySelector('#message')?.value.trim() || document.querySelector('#content')?.dataset.hasDraft === 'true')");
         return {busy:Boolean(active || persisting || download || approvals.size || draft),reason:persisting?'saving the response':active?'generating a response':download?'downloading a model':approvals.size?'waiting for approval':draft?'send or clear your draft message':''};
       },
       async prepareClose() {

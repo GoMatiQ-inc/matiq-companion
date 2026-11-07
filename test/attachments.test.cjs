@@ -7,7 +7,7 @@ const {Projects} = require("../src/projects.cjs");
 const {readAttachments} = require("../src/attachments.cjs");
 const docs = require("../src/documents.cjs");
 test("ordinary chats stay distinct from existing projects and selected attachments require live grants", async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "companion-attachments-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-attachments-")));
   t.after(() => fs.rm(root, {recursive:true,force:true}));
   const projects = new Projects(path.join(root, "profile", "projects"));
   const chat = await projects.create("New chat", "chat");
@@ -26,7 +26,7 @@ test("ordinary chats stay distinct from existing projects and selected attachmen
   await assert.rejects(readAttachments(projects,chat.id,Array(7).fill("chosen")),/six/);
 });
 test("attachment extraction reads Office files and marks bounded text excerpts without claiming image support", async t => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "companion-attachment-formats-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-attachment-formats-")));
   t.after(() => fs.rm(root,{recursive:true,force:true}));
   const projects = new Projects(path.join(root,"profile","projects")), chat = await projects.create("New chat","chat");
   async function attach(name,bytes) {

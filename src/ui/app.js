@@ -100,7 +100,7 @@ function permissionRows(container) {
       [
         "files",
         "Files",
-        "Read granted locations; create, modify and move files after approval. Project files are the default scope.",
+        "Read granted locations; create, modify and move files after approval. Files generated in this conversation are the default scope.",
       ],
       [
         "documents",
@@ -153,6 +153,7 @@ function permissionRows(container) {
 function render() {
   const currentDraft = $("#message");
   if (currentDraft) draft = currentDraft.value;
+  $("#content").dataset.hasDraft = String(Boolean(draft.trim() || attachments.length));
   document.body.classList.toggle("chat-view", view === "chat");
   const nav = $("#nav");
   nav.replaceChildren();
@@ -372,7 +373,7 @@ function render() {
     root.append(
       heading(
         "Tools you control.",
-        "Each project has its own permissions. File changes, web requests and every computer action require your approval.",
+        "Each conversation has its own permissions. File changes, web requests and every computer action require your approval.",
       ),
     );
     permissionRows(root);
@@ -382,7 +383,7 @@ function render() {
     root.append(
       heading(
         "Choose what Companion can access.",
-        "New files stay inside this project. Grant additional files or folders explicitly; read and write access are separate.",
+        "New files stay with this conversation. Grant additional files or folders explicitly; read and write access are separate.",
       ),
     );
     root.append(
@@ -403,7 +404,7 @@ function render() {
           project = await call("grant.add", { id: project.id, mode: "write" });
           render();
         }),
-        button("Show project files", () =>
+        button("Show conversation files", () =>
           call("files.open", { id: project.id }),
         ),
       ),
@@ -425,7 +426,7 @@ function render() {
       root.append(row);
     }
     const listing = el("div", undefined, "panel");
-    listing.append(el("h2", "Project files"));
+    listing.append(el("h2", project.kind === "chat" ? "Chat files" : "Project files"));
     root.append(listing);
     call("files.list", { id: project.id })
       .then((value) => {
@@ -453,7 +454,7 @@ function render() {
   }
   for (const m of project?.messages || []) {
     const box = el("article", undefined, "message " + m.role + (m.status === "interrupted" ? " interrupted" : ""));
-    box.append(el("strong", m.role === "user" ? "You" : "Companion"), el("div", m.displayText || m.text));
+    box.append(el("strong", m.role === "user" ? "You" : "Companion"), el("div", m.role === "assistant" ? m.text.replace(/^[\r\n]+/, "") : (m.displayText || m.text)));
     if (m.attachments?.length) box.append(el("small", m.attachments.map(a => a.name + (a.truncated ? " (excerpt)" : "")).join(", "), "message-files"));
     if (m.error) box.append(el("p", m.error, "error"));
     messages.append(box);
@@ -468,7 +469,7 @@ function render() {
   text.id = "message"; text.value = draft; text.rows = 2;
   text.placeholder = "Message Companion…";
   text.setAttribute("aria-label", "Message Companion");
-  text.oninput = () => {draft = text.value; text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 180) + "px";};
+  text.oninput = () => {draft = text.value; $("#content").dataset.hasDraft = String(Boolean(draft.trim() || attachments.length)); text.style.height = "auto"; text.style.height = Math.min(text.scrollHeight, 180) + "px";};
   text.onkeydown = e => {
     if (e.key === "Enter" && !e.shiftKey && !e.isComposing && e.keyCode !== 229) {
       e.preventDefault();

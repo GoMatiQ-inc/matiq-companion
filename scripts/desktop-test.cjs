@@ -9,7 +9,7 @@ const assert = require("node:assert/strict");
   const profile = await fs.mkdtemp(
     path.join(os.tmpdir(), "companion-desktop-"),
   );
-  const selectedRoot = await fs.mkdtemp(path.join(os.tmpdir(), "companion-selected-"));
+  const selectedRoot = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-selected-")));
   if (process.env.COMPANION_VALIDATION_MODELS) {
     const { ModelStore } = require("../src/models.cjs");
     const { MODELS } = require("../src/catalog.cjs");
@@ -41,8 +41,8 @@ const assert = require("node:assert/strict");
         : [path.resolve(__dirname, "..")],
       env: { ...process.env, COMPANION_TEST_PROFILE: profile },
     });
-    page = await app.firstWindow();
     handle = app.process(); owned = lifecycle.capture(handle);
+    page = await app.firstWindow();
     await page.getByRole("heading", {name: "What can I help you with?"}).waitFor();
     await fs.mkdir(".validation", {recursive:true});
     assert.equal((await page.evaluate(() => window.companion.call("state"))).projects.length, 0);
@@ -66,6 +66,7 @@ const assert = require("node:assert/strict");
     await page.getByRole("button", {name:"Models", exact:true}).click();
     await page.getByRole("heading", {name:"Models on your computer."}).waitFor();
     await page.screenshot({path: ".validation/companion-models.png"});
+    assert.equal(await page.evaluate(() => document.querySelector("#content").dataset.hasDraft), "true", "The close guard must retain the offscreen composer draft.");
     if (process.env.COMPANION_VALIDATION_MODELS) await page.evaluate(() => window.companion.call("models.select", {id:"qwen3-0.6b"}));
     await page.getByRole("button", {name:"Chat", exact:true}).click();
     assert.equal(await message.inputValue(), "A draft\nx", "Navigation must preserve the composer draft.");
@@ -112,6 +113,11 @@ const assert = require("node:assert/strict");
     await page.getByRole("button", {name:"New chat", exact:true}).click();
     await page.getByRole("heading", {name:"What can I help you with?"}).waitFor();
     assert.equal(await message.inputValue(), "");
+    if (process.env.COMPANION_VALIDATION_MODELS) {
+      await page.locator(".chat-history").first().click();
+      await page.locator(".message.assistant:not(#live-message)").filter({hasText:"Hello"}).waitFor();
+      await page.getByRole("button", {name:"New chat", exact:true}).click();
+    }
     await page.getByRole("button", {name:"Projects", exact:true}).click();
     assert.equal(await page.getByRole("button", {name:"Open project",exact:true}).count(), 0, "Ordinary chats are not projects.");
     await page.getByLabel("New project").fill("Optional project");
