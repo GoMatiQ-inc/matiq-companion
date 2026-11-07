@@ -474,7 +474,7 @@ async function bundleVersion(apps) {
     );
     console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
       });
-      await stage("close controlled desktop", () => cleanupDesktop({app,owned:owned?[owned]:[]}));
+      await stage("close controlled desktop", () => cleanupDesktop({app:handle?{process:()=>handle,close:()=>app.close()}:undefined,owned:owned?[owned]:[]}));
       // The updater relaunches independently of Playwright. Give its main
       // process a graceful quit while its renderer can still answer busy checks.
       let remaining = [];
