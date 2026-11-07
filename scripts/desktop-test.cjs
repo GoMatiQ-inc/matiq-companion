@@ -46,6 +46,7 @@ const assert = require("node:assert/strict");
     await page.getByRole("heading", {name: "What can I help you with?"}).waitFor();
     await fs.mkdir(".validation", {recursive:true});
     assert.equal((await page.evaluate(() => window.companion.call("state"))).projects.length, 0);
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
     await page.screenshot({path: ".validation/companion-chat-empty.png"});
     const message = page.getByLabel("Message Companion");
     await message.fill("A draft");
@@ -55,6 +56,7 @@ const assert = require("node:assert/strict");
     await page.getByText("Permissions", {exact:true}).click();
     assert.equal(await page.getByRole("checkbox").count(), 4);
     await page.getByRole("checkbox", {name:"Word and Excel"}).check();
+    await waitFor(() => page.evaluate(async () => (await window.companion.call("state")).projects.some(p => p.kind === "chat")), "Conversation publication", 10000);
     const state = await page.evaluate(() => window.companion.call("state"));
     assert.equal(state.projects[0].kind, "chat");
     await waitFor(() => page.evaluate(async id => (await window.companion.call("project.open", {id})).tools.documents, state.projects[0].id), "Conversation permission persistence", 10000);
@@ -179,7 +181,14 @@ const assert = require("node:assert/strict");
           if(handle && handle.exitCode === null && handle.signalCode === null) handle.kill("SIGKILL");
         }
       }
-      for(const snapshot of tree)await lifecycle.verifyStopped(snapshot);
+      const failures=[];
+      for(const snapshot of tree) {
+        try {await lifecycle.stopOwned(snapshot);}catch(error){failures.push(error);}
+      }
+      for(const snapshot of tree) {
+        try {await lifecycle.verifyStopped(snapshot);}catch(error){failures.push(error);}
+      }
+      if(failures.length)throw new AggregateError(failures, "Owned runtime cleanup failed; retain the fixture for inspection.");
       await fs.rm(profile, {recursive:true,force:true});
       await fs.rm(selectedRoot, {recursive:true,force:true});
       if(closeError)throw closeError;

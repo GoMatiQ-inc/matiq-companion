@@ -1,23 +1,22 @@
 const fs = require("node:fs/promises");
 const path = require("node:path");
 const { randomUUID } = require("node:crypto");
+async function renameWithRetry(from, to) {
+  for (let attempt = 0; ; attempt++) {
+    try { await fs.rename(from, to); return; }
+    catch (error) {
+      // Windows scanners can briefly hold a file without allowing replacement.
+      if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(error.code) || attempt >= 40) throw error;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    }
+  }
+}
 async function atomicJSON(file, value) {
   const tmp = file + "." + randomUUID() + ".tmp";
   try {
     await fs.writeFile(tmp, JSON.stringify(value, null, 2) + "\n", {mode: 0o600});
-    for (let attempt = 0; ; attempt++) {
-      try {
-        await fs.rename(tmp, file);
-        break;
-      } catch (error) {
-        // Windows scanners can briefly hold a file without allowing replacement.
-        if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(error.code) || attempt >= 40) throw error;
-        await new Promise(resolve => setTimeout(resolve, 50));
-      }
-    }
-  } finally {
-    await fs.rm(tmp, {force: true});
-  }
+    await renameWithRetry(tmp, file);
+  } finally { await fs.rm(tmp, {force: true}); }
 }
 class Projects {
   constructor(root) {
@@ -33,7 +32,8 @@ class Projects {
       throw Error("Name the project using 1–100 characters.");
     const id = randomUUID();
     const dir = this.folder(id);
-    await fs.mkdir(path.join(dir, "files"), { recursive: true, mode: 0o700 });
+    const staging = path.join(this.root, ".creating-" + id);
+    await fs.mkdir(path.join(staging, "files"), {recursive: true, mode: 0o700});
     const p = {
       id,
       name: name.trim(),
@@ -43,15 +43,18 @@ class Projects {
       grants: [],
       messages: [],
     };
-    await this.save(p);
-    return p;
+    try {
+      await atomicJSON(path.join(staging, "project.json"), p);
+      await renameWithRetry(staging, dir);
+      return p;
+    } finally { await fs.rm(staging, {recursive: true, force: true}); }
   }
   async update(id, mutate) {
     const previous = this.pending.get(id) || Promise.resolve();
     const next = previous
       .catch(() => {})
       .then(async () => {
-        const p = await this.get(id);
+        const p = await this.readRecord(id);
         await mutate(p);
         await this.save(p);
         return p;
@@ -64,6 +67,10 @@ class Projects {
     }
   }
   async get(id) {
+    await this.pending.get(id);
+    return this.readRecord(id);
+  }
+  async readRecord(id) {
     return JSON.parse(
       await fs.readFile(path.join(this.folder(id), "project.json"), "utf8"),
     );
