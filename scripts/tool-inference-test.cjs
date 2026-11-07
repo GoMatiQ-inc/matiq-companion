@@ -50,8 +50,8 @@ const { readWord } = require("../src/documents.cjs");
             let result;
             if(m.name==='observe_screen') {
               observations++;
-              result={width:1920,height:1080,text:'Large native OCR result '.repeat(1000),
-                words:Array.from({length:300},(_,i)=>({text:'word-'+i,x:i,y:i+20,confidence:99}))};
+              result={width:1920,height:1080,text:'MATIQ NATIVE ACCEPTANCE TARGET '+'Large native OCR result '.repeat(1000),
+                words:Array.from({length:300},(_,i)=>({text:i===0?'MATIQ NATIVE ACCEPTANCE TARGET':'word-'+i,x:i,y:i+20,confidence:99}))};
             } else {
               assert.equal(m.name,'create_word');assert.equal(m.args.path,'proof.docx');
               result=await tools.run(project.id,m.name,m.args);
@@ -76,7 +76,7 @@ const { readWord } = require("../src/documents.cjs");
     phase='large OCR tool result';chunks=0;
     const observed=await prompt({
       modelPath:store.location(MODELS[0]),
-      tools:tools.definitions({...project,tools:{...project.tools,computer:true}}).filter(t=>['observe_screen','click_screen','type_text','press_key'].includes(t.name)),
+      tools:tools.definitions({...project,tools:{...project.tools,computer:true}}).filter(t=>t.name==='observe_screen'),
       system:'You are a local desktop assistant. Use observe_screen when asked. After receiving its result, answer briefly. /no_think',
       text:'Call observe_screen now with arguments {} to inspect the disposable TextEdit document labelled MATIQ NATIVE ACCEPTANCE TARGET. Do not claim to have observed it without using the tool. Do not change any files or settings.'
     });
