@@ -1,9 +1,9 @@
 // Bound results with the loaded model's tokenizer, including the truncation notice.
-function serializeToolResult(result, tokenize) {
+function boundToolResult(result, tokenize) {
   const budget = 1024;
   const encode = value => JSON.stringify(value);
   const fits = value => tokenize(encode(value)).length <= budget;
-  if (fits(result)) return encode(result);
+  if (fits(result)) return result;
   if (Array.isArray(result.words)) {
     const words = result.words.map(word => [word.text, word.x, word.y]);
     const screen = count => ({
@@ -14,7 +14,7 @@ function serializeToolResult(result, tokenize) {
       totalWords: words.length,
       note: 'Word entries are [text, x, y] in primary-screen logical pixels. Only the first words that fit the local model context are included; remaining words and duplicate OCR text are omitted. Observe again before acting.',
     });
-    if (fits(screen(0))) return encode(screen(largestPrefix(words.length, count => fits(screen(count)))));
+    if (fits(screen(0))) return screen(largestPrefix(words.length, count => fits(screen(count))));
   }
   const text = encode(result);
   const excerpt = count => ({
@@ -22,7 +22,7 @@ function serializeToolResult(result, tokenize) {
     excerpt: text.slice(0, count),
     note: 'Only a prefix of the tool result fits the local model context. This excerpt may end inside a value; omitted content is unknown. Request a smaller result before relying on missing details.',
   });
-  return encode(excerpt(largestPrefix(text.length, count => fits(excerpt(count)))));
+  return excerpt(largestPrefix(text.length, count => fits(excerpt(count))));
 }
 function largestPrefix(length, fits) {
   let low = 0, high = length;
@@ -33,4 +33,4 @@ function largestPrefix(length, fits) {
   }
   return low;
 }
-module.exports = { serializeToolResult };
+module.exports = { boundToolResult };
