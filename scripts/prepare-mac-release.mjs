@@ -27,8 +27,13 @@ export async function prepareMacRelease(input, output, version) {
     const expected=[pkg,zip,'latest-mac.yml'];
     if(names.includes(zip+'.blockmap')) expected.push(zip+'.blockmap');
     assert.deepEqual(names,expected.sort(),'Signature proof must cover exactly the downloadable artifacts.');
-    const present=(await fs.readdir(directory)).filter(n=>!['builder-debug.yml','mac-signature.json','upgrade-proof.json'].includes(n)).sort();
-    assert.deepEqual(present,names,'Reject unverified or missing artifacts.');
+    const suite=await read('suite-proof.json'),tool=`MatiQ-Companion-${version}-darwin-${arch}.mqt`,toolNames=[tool,tool+'.release.json'];
+    assert.equal(suite.version,version);assert.equal(suite.target,'darwin-'+arch);
+    for(const check of ['trusted-native-package','explicit-install','real-native-inference','retained-workspace','host-owned-updates'])assert.ok(suite.checks.includes(check),'Require actual hosted-tool qualification: '+check);
+    assert.deepEqual(Object.keys(suite.artifacts).sort(),toolNames.sort());
+    for(const name of toolNames){const bytes=await fs.readFile(path.join(directory,name));assert.equal(digest(bytes),suite.artifacts[name],'Unverified suite tool bytes: '+name);if(name===tool)assert.equal(digest(bytes),suite.packageSha256);published.set(name,bytes);}
+    const present=(await fs.readdir(directory)).filter(n=>!['builder-debug.yml','mac-signature.json','upgrade-proof.json','suite-proof.json'].includes(n)).sort();
+    assert.deepEqual(present,[...names,...toolNames].sort(),'Reject unverified or missing artifacts.');
     for(const name of names) {
       const bytes=await fs.readFile(path.join(directory,name));
       assert.equal(digest(bytes),proof.assets[name],`Unverified artifact bytes: ${name}`);

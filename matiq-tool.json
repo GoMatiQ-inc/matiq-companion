@@ -3,7 +3,7 @@
   "id": "com.matiq.companion",
   "name": "MatiQ Companion",
   "description": "Chat with local models and manage project files with tools you control.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "sdk": 1,
   "dataVersion": 1,
   "runtime": "electron-45.2.3",

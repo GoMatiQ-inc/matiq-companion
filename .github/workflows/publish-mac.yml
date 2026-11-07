@@ -139,7 +139,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           shopt -s nullglob
-          assets=(release-assets/*.pkg release-assets/*.exe release-assets/*.zip release-assets/*.blockmap release-assets/*.yml release-assets/SHA256SUMS.txt)
+          assets=(release-assets/*.pkg release-assets/*.exe release-assets/*.zip release-assets/*.blockmap release-assets/*.yml release-assets/*.mqt release-assets/*.mqt.release.json release-assets/SHA256SUMS.txt)
           if [[ "$EXISTING_DRAFT" == true ]]; then
             gh release upload "$RELEASE_TAG" "${assets[@]}"
             gh release edit "$RELEASE_TAG" --draft=false --latest --title "MatiQ Companion $RELEASE_TAG — $RELEASE_LABEL" --notes-file release-assets/RELEASE_NOTES.md

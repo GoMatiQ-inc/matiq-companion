@@ -1,3 +1,4 @@
+const {withNotaryProfile} = require("@matiq-solutions/sdk/notary-profile.cjs");
 const path = require("node:path");
 const { withMacKeychain } = require("./mac-keychain.cjs");
 async function main() {
@@ -9,7 +10,7 @@ async function main() {
       publish: "never",
     });
   if (process.platform === "darwin")
-    await withMacKeychain(process.env, operation);
+    await withMacKeychain(process.env, () => withNotaryProfile(process.env, operation));
   else await operation();
 }
 main().catch((error) => {
