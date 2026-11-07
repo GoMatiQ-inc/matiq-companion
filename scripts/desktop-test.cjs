@@ -1,5 +1,4 @@
 const lifecycle = require("./fixture-lifecycle.cjs");
-const {cleanupDesktop} = require("@matiq-solutions/sdk/fixture-cleanup.cjs");
 const { waitFor } = require("./wait-for.cjs");
 const { _electron: electron } = require("playwright");
 const fs = require("node:fs/promises");
@@ -52,6 +51,7 @@ const assert = require("node:assert/strict");
     await message.fill("A draft");
     await message.press("Shift+Enter"); await message.press("x");
     assert.equal(await message.inputValue(), "A draft\nx");
+    if(process.env.COMPANION_FIXTURE_FAIL_WITH_DRAFT === "1")throw Error("Controlled failure with an unsent draft.");
     await page.getByText("Permissions", {exact:true}).click();
     assert.equal(await page.getByRole("checkbox").count(), 4);
     await page.getByRole("checkbox", {name:"Word and Excel"}).check();
@@ -164,9 +164,29 @@ const assert = require("node:assert/strict");
     }
     throw error;
   } finally {
-    if(writeFixture)await app.evaluate(()=>globalThis.fixtureRestoreWrite?.()).catch(error=>console.error('Write fixture restoration failed:',error.message));
-    await cleanupDesktop({app,owned:owned?[owned]:[],temporary:profile,watchdog});
-    await fs.rm(selectedRoot, { recursive:true, force:true });
+    const tree = lifecycle.captureTree(owned);
+    let closeTimer, closeError;
+    try {
+      if(writeFixture)await app.evaluate(()=>globalThis.fixtureRestoreWrite?.()).catch(error=>console.error('Write fixture restoration failed:',error.message));
+      if(app) {
+        try {
+          await Promise.race([app.close(), new Promise((_,reject) => {
+            closeTimer = setTimeout(() => reject(Error("Normal fixture close timed out.")), 10000);
+          })]);
+        } catch(error) {
+          closeError = error;
+          // Signal only the original controlled child handle, never an arbitrary/reused PID.
+          if(handle && handle.exitCode === null && handle.signalCode === null) handle.kill("SIGKILL");
+        }
+      }
+      for(const snapshot of tree)await lifecycle.verifyStopped(snapshot);
+      await fs.rm(profile, {recursive:true,force:true});
+      await fs.rm(selectedRoot, {recursive:true,force:true});
+      if(closeError)throw closeError;
+    } finally {
+      clearTimeout(closeTimer);
+      clearTimeout(watchdog);
+    }
   }
 })().catch((e) => {
   console.error(e);
