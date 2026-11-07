@@ -1,7 +1,7 @@
 {
   "name": "matiq-companion",
   "productName": "MatiQ Companion",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "private": true,
   "description": "A local AI workspace by MatiQ Solutions.",
   "author": "MatiQ Inc",

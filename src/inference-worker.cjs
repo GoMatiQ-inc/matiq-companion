@@ -1,4 +1,5 @@
 const { boundToolResult } = require("./tool-result.cjs");
+const { createToolChatWrapper } = require("./chat-context.cjs");
 let api, llama, model, context, controller, loadedPath, runtimePromise;
 const requests = new Map();
 let sequence = 0;
@@ -68,7 +69,9 @@ process.on("message", async (m) => {
       devices: await llama.getGpuDeviceNames(),
       vram: await llama.getVramState(),
     });
+    const functions = {};
     const session = new api.LlamaChatSession({
+      chatWrapper: createToolChatWrapper(api, model, functions),
       contextSequence: context.getSequence(),
       systemPrompt: m.system,
     });
@@ -85,7 +88,6 @@ process.on("message", async (m) => {
     ];
     session.setChatHistory(history);
     let calls = 0;
-    const functions = {};
     for (const d of m.tools) {
       functions[d.name] = api.defineChatSessionFunction({
         description: d.description,
@@ -113,6 +115,7 @@ process.on("message", async (m) => {
       signal: controller.signal,
       maxTokens: 1200,
       temperature: 0.2,
+      budgets: { thoughtTokens: 0 },
       onTextChunk: (text) => send({ type: "chunk", text }),
     });
     send({ type: "done", text });
