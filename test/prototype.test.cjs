@@ -11,6 +11,7 @@ test("prototype renders against sample state and cannot dispatch an unrecognized
     URLSearchParams,
     structuredClone,
     crypto,
+    setTimeout,
   };
   vm.runInNewContext(
     fs.readFileSync(path.join(__dirname, "../prototype/bridge.js"), "utf8"),

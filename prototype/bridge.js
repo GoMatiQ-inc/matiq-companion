@@ -84,6 +84,7 @@
           },
         );
         if (p.name === "New chat") p.name = args.text.slice(0, 50);
+      setTimeout(() => listeners.forEach(fn => fn({type: "chat.finished"})), 0);
         return;
       }
       if (name === "chat.cancel") return;
