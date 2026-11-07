@@ -15,7 +15,7 @@ const { readWord } = require("../src/documents.cjs");
   const store = new ModelStore(process.env.COMPANION_VALIDATION_MODELS);
   assert.ok(await store.verify(MODELS[0]));
   const dir = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "companion-tools-")));
-  let child, owned, runtime, diagnostics = "", phase="document tool", stage="starting-worker", chunks=0, runtimeInitializations=0, ocrSampling=0;
+  let child, owned, runtime, diagnostics = "", phase="document tool", stage="starting-worker", chunks=0, runtimeInitializations=0, ocrSampling=0, contextShiftProof;
   const watchdog = setTimeout(() => { process.exitCode=1;child?.kill("SIGKILL"); },300000);
   try {
     const projects = new Projects(path.join(dir, "projects"));
@@ -32,11 +32,11 @@ const { readWord } = require("../src/documents.cjs");
       : path.join(__dirname,'../src/inference-worker.cjs');
     const bootstrap=path.join(dir,'worker.cjs');
     // Control sampling only in this owned OCR fixture; production document/lifetime prompts retain app defaults.
-    await fs.writeFile(bootstrap,`(async()=>{const {createRequire}=require('node:module'),{pathToFileURL}=require('node:url');const api=await import(pathToFileURL(createRequire(${JSON.stringify(worker)}).resolve('node-llama-cpp')).href);const prompt=api.LlamaChatSession.prototype.prompt;api.LlamaChatSession.prototype.prompt=function(text,options){if(Object.keys(options.functions||{}).length===1&&options.functions.observe_screen){process.send({type:'fixture-ocr-sampling'});return prompt.call(this,text,{...options,temperature:0,seed:1,maxTokens:128});}return prompt.call(this,text,options);};process.send({type:'fixture-runtime',node:process.versions.node,electron:process.versions.electron});require(${JSON.stringify(worker)});})().catch(error=>{console.error(error);process.exitCode=1;});`);
+    await fs.writeFile(bootstrap,`(async()=>{const {createRequire}=require('node:module'),{pathToFileURL}=require('node:url');const api=await import(pathToFileURL(createRequire(${JSON.stringify(worker)}).resolve('node-llama-cpp')).href);const {verifyContextShift}=require(${JSON.stringify(path.join(__dirname,'context-shift-regression.cjs'))});const prompt=api.LlamaChatSession.prototype.prompt;let contextVerified=false;api.LlamaChatSession.prototype.prompt=async function(text,options){if(!contextVerified){const proof=await verifyContextShift(api,this.model,${JSON.stringify(worker)});process.send({type:'fixture-context-shift',proof});contextVerified=true;}if(Object.keys(options.functions||{}).length===1&&options.functions.observe_screen){process.send({type:'fixture-ocr-sampling'});return prompt.call(this,text,{...options,temperature:0,seed:1,maxTokens:128});}return prompt.call(this,text,options);};process.send({type:'fixture-runtime',node:process.versions.node,electron:process.versions.electron});require(${JSON.stringify(worker)});})().catch(error=>{console.error(error);process.exitCode=1;});`);
     child=fork(bootstrap,[],{execPath:executable,env:{...process.env,ELECTRON_RUN_AS_NODE:'1'},stdio:['ignore','ignore','pipe','ipc']});
     owned=lifecycle.capture(child);
     child.stderr.on('data',bytes=>{diagnostics=(diagnostics+bytes).slice(-3000);});
-    child.on('message',message=>{if(message.type==='fixture-runtime'){runtime=message;console.log('Actual worker runtime:',JSON.stringify(runtime));}if(message.type==='stage'){stage=message.stage;if(stage==='initializing-runtime')runtimeInitializations++;console.log('Worker stage:',phase,stage);}if(message.type==='chunk')chunks++;if(message.type==='fixture-ocr-sampling')ocrSampling++;});
+    child.on('message',message=>{if(message.type==='fixture-runtime'){runtime=message;console.log('Actual worker runtime:',JSON.stringify(runtime));}if(message.type==='stage'){stage=message.stage;if(stage==='initializing-runtime')runtimeInitializations++;console.log('Worker stage:',phase,stage);}if(message.type==='chunk')chunks++;if(message.type==='fixture-ocr-sampling')ocrSampling++;if(message.type==='fixture-context-shift')contextShiftProof=message.proof;});
     const prompt=message=>new Promise((resolve,reject)=>{
       const timer=setTimeout(()=>finish(Error('Worker prompt timed out: '+JSON.stringify({phase,stage,chunks,runtime,diagnostics,observations,ocrSampling}))),150000);
       const finish=(error,value)=>{
@@ -51,8 +51,8 @@ const { readWord } = require("../src/documents.cjs");
             let result;
             if(m.name==='observe_screen') {
               observations++;
-              result={width:1920,height:1080,text:'MATIQ NATIVE ACCEPTANCE TARGET '+'Large native OCR result '.repeat(1000),
-                words:Array.from({length:300},(_,i)=>({text:i===0?'MATIQ NATIVE ACCEPTANCE TARGET':'word-'+i,x:i,y:i+20,confidence:99}))};
+              result={width:1920,height:1080,text:'Verification code MTQ-73429. MATIQ NATIVE ACCEPTANCE TARGET '+'Large native OCR result '.repeat(1000),
+                words:Array.from({length:300},(_,i)=>({text:['Verification','code','MTQ-73429','MATIQ','NATIVE','ACCEPTANCE','TARGET'][i]||'word-'+i,x:i,y:i+20,confidence:99}))};
             } else {
               assert.equal(m.name,'create_word');assert.equal(m.args.path,'proof.docx');
               result=await tools.run(project.id,m.name,m.args);
@@ -79,11 +79,12 @@ const { readWord } = require("../src/documents.cjs");
       modelPath:store.location(MODELS[0]),
       tools:tools.definitions({...project,tools:{...project.tools,computer:true}}).filter(t=>t.name==='observe_screen'),
       system:'You are a local desktop assistant. Use observe_screen when asked. After receiving its result, answer briefly. /no_think',
-      text:'Call observe_screen now with arguments {} to inspect the disposable TextEdit document labelled MATIQ NATIVE ACCEPTANCE TARGET. Do not claim to have observed it without using the tool. Do not change any files or settings. Report the target coordinates in at most 15 words. /no_think'
+      text:'Call observe_screen now with arguments {} to inspect the disposable TextEdit document labelled MATIQ NATIVE ACCEPTANCE TARGET. Do not claim to have observed it without using the tool. Do not change any files or settings. After the tool succeeds, report the verification code from its result in at most 15 words. /no_think'
     });
+    assert.ok(contextShiftProof?.baselineRejected && contextShiftProof?.latestObservationRetained,'Qualify repeated-result history compression with actual model tokenization.');
     assert.equal(ocrSampling,1,'Apply deterministic sampling only to the owned OCR regression worker.');
     assert.ok(observations>0,'The real model must request the oversized screen observation; returned: '+JSON.stringify(observed));
-    // prompt resolves only on the production worker's done event; tool-only turns may have no final prose.
+    assert.match(observed,/MTQ-73429/,'Return the verification code available only in the tool result as visible model output.');
     const alternate=path.join(dir,'verified-weight-alias.gguf');
     try {await fs.link(store.location(MODELS[0]),alternate);} catch(error){if(error.code!=='EXDEV')throw error;await fs.copyFile(store.location(MODELS[0]),alternate);}
     for(let iteration=0;iteration<5;iteration++){
@@ -95,7 +96,7 @@ const { readWord } = require("../src/documents.cjs");
     assert.equal(runtime?.electron,require('electron/package.json').version,'Use the exact Electron runtime shipped with Companion.');
     assert.equal(Number(runtime.node.split('.')[0]),24,'Qualify the embedded Node major used by the app.');
     await fs.mkdir('.validation',{recursive:true});
-    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,oversizedOcrObservations:observations,ocrSampling:{temperature:0,seed:1,maxTokens:128},completedModelReloads:5,runtimeInitializations,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
+    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,oversizedOcrObservations:observations,ocrSampling:{temperature:0,seed:1,maxTokens:128},contextShiftProof,completedModelReloads:5,runtimeInitializations,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
     console.log('PASS: actual Electron worker completed document tool, full document/lifetime responses, bounded oversized OCR turn and five native model unload/reload cycles.');
   } finally {
     const tree=lifecycle.captureTree(owned);
