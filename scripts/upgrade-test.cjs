@@ -9,6 +9,7 @@ const { createHash, randomUUID } = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const assert = require("node:assert/strict");
 const lifecycle = require("./fixture-lifecycle.cjs");
+const { cleanupDesktop } = require("@matiq-solutions/sdk/fixture-cleanup.cjs");
 const { waitFor } = require("./wait-for.cjs");
 const { ModelStore, sharedRoot } = require("../src/models.cjs");
 const windows = process.platform === "win32";
@@ -240,6 +241,7 @@ async function bundleVersion(apps) {
     owned,
     port,
     authorizationFixture,
+    failure,
     successful = false;
   const watchdog = setTimeout(() => {
     for (const process of [...processesIn(ownedApplication), ...processesIn(shipIt)])
@@ -419,9 +421,18 @@ async function bundleVersion(apps) {
         targetVersion +
         "; project, settings, model SHA256 and generated file preserved.",
     );
+  } catch (error) {
+    failure = error;
+    throw error;
   } finally {
+    const cleanupErrors = [];
+    let runtimeStopped = false;
+    async function stage(label, operation) {
+      try { await operation(); }
+      catch (error) { cleanupErrors.push(new Error(label + ": " + error.message, {cause:error})); console.error("Upgrade cleanup failed — " + label + ": " + error.message); }
+    }
     try {
-    clearTimeout(watchdog);
+      await stage("save native diagnostics", async () => {
     const diagnostic = {
       successful,
       runtimeLog,
@@ -462,38 +473,53 @@ async function bundleVersion(apps) {
       JSON.stringify(diagnostic, null, 2) + "\n",
     );
     console.log("Upgrade diagnostics:", JSON.stringify(diagnostic));
-    if (handle && handle.exitCode === null && handle.signalCode === null)
-      await app.close();
-    const remaining = [...processesIn(ownedApplication), ...processesIn(shipIt)].map(
-      (process) => lifecycle.capture({ pid: process.pid }),
-    );
-    for (const snapshot of remaining) {
-      try {
-        process.kill(snapshot.pid, "SIGTERM");
-      } catch (error) {
-        if (error.code !== "ESRCH") throw error;
-      }
-    }
-    for (const snapshot of remaining) await lifecycle.verifyStopped(snapshot);
-    await lifecycle.verifyStopped(owned);
-    server.closeAllConnections();
-    await new Promise((resolve) => server.close(resolve));
-    if (port)
-      await new Promise((resolve, reject) => {
-        const socket = net.connect({ host: "127.0.0.1", port });
-        socket.once("connect", () => {
-          socket.destroy();
-          reject(Error("Qualification fixture port remains open."));
-        });
-        socket.once("error", (error) =>
-          error.code === "ECONNREFUSED" ? resolve() : reject(error),
-        );
       });
-    assert.equal(
-      [...processesIn(ownedApplication), ...processesIn(shipIt)].length,
-      0,
-      "Owned updater processes remain.",
-    );
+      await stage("close controlled desktop", () => cleanupDesktop({app:handle?{process:()=>handle,close:()=>app.close()}:undefined,owned:owned?[owned]:[]}));
+      // The updater relaunches independently of Playwright. Give its main
+      // process a graceful quit while its renderer can still answer busy checks.
+      let remaining = [];
+      await stage("inspect independently relaunched runtimes", async () => { remaining = [...processesIn(ownedApplication), ...processesIn(shipIt)]; });
+      for (const row of remaining) await stage("stop relaunched runtime " + row.pid, async () => {
+        const directory = row.executable.startsWith(ownedApplication + path.sep) ? ownedApplication : shipIt;
+        const current = () => processesIn(directory).some(candidate => candidate.pid === row.pid && candidate.uid === row.uid && candidate.executable === row.executable);
+        const snapshot = lifecycle.capture({pid:row.pid});
+        const controller = {
+          process: () => ({pid:row.pid,exitCode:current()?null:0,signalCode:null}),
+          close: async () => {
+            if (!current()) return;
+            if (row.executable === realpathSync(executable)) {
+              if (windows) {
+                assert.equal(powershell("$p=Get-Process -Id " + row.pid + ";$p.CloseMainWindow()"), "True", "The owned native app refused its quit request.");
+              } else {
+                const script = "ObjC.import('AppKit');var a=$.NSRunningApplication.runningApplicationWithProcessIdentifier(" + row.pid + ");if(!a||ObjC.unwrap(a.bundleURL.path)!==" + JSON.stringify(ownedApplication) + ")throw Error('The native app identity changed.');String(a.terminate);";
+                assert.equal(execFileSync("/usr/bin/osascript",["-l","JavaScript","-e",script],{encoding:"utf8",timeout:10000}).trim(),"true","The owned native app refused its quit request.");
+              }
+            } else {
+              process.kill(row.pid,"SIGTERM");
+            }
+            await waitFor(() => !current(), "Owned native runtime shutdown", 8000);
+          },
+        };
+        await cleanupDesktop({app:controller,owned:[snapshot]});
+      });
+      await stage("independently verify runtime absence", async () => {
+        if (owned) await lifecycle.verifyStopped(owned);
+        assert.equal([...processesIn(ownedApplication),...processesIn(shipIt)].length,0,"Owned updater processes remain. Retain the fixture files.");
+        runtimeStopped = true;
+      });
+      await stage("close and verify the loopback fixture", async () => {
+        server.closeAllConnections();
+        if (server.listening) await new Promise(resolve => server.close(resolve));
+        if (port) await new Promise((resolve,reject) => {
+          const socket=net.connect({host:"127.0.0.1",port});
+          socket.setTimeout(1000);
+          socket.once("connect",()=>{socket.destroy();reject(Error("Qualification fixture port remains open."));});
+          socket.once("error",error=>{socket.destroy();error.code==="ECONNREFUSED"?resolve():reject(error);});
+          socket.once("timeout",()=>{socket.destroy();reject(Error("Cannot verify qualification fixture port cleanup."));});
+        });
+      });
+      await stage("remove owned fixture files", async () => {
+        assert.ok(runtimeStopped,"Retain fixture files while runtime cleanup is unverified.");
     for (const owned of [profile, modelRoot, updaterCache]) {
       assert.equal(
         await fs.readFile(path.join(owned, ".upgrade-owner"), "utf8"),
@@ -517,8 +543,13 @@ async function bundleVersion(apps) {
     }
     if (!existingShipIt) await fs.rm(shipIt, { recursive: true, force: true });
     await fs.rm(directory, { recursive: true, force: true });
+      });
+    } finally {
+      await stage("remove owned authorization identity", async () => authorizationFixture?.close());
+      clearTimeout(watchdog);
+    }
+    if (cleanupErrors.length) throw new AggregateError([...(failure?[failure]:[]),...cleanupErrors],"Upgrade fixture cleanup did not pass. Inspect each owned runtime and listener failure.");
     console.log("PASS: upgrade fixture process and loopback port cleanup.");
-    } finally {authorizationFixture?.close();}
   }
   assert.ok(successful, "The signed upgrade did not complete.");
 })().catch((error) => {
