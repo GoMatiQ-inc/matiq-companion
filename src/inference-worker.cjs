@@ -1,3 +1,4 @@
+const { serializeToolResult } = require("./tool-result.cjs");
 let api, llama, model, context, controller, loadedPath, runtimePromise;
 const requests = new Map();
 let sequence = 0;
@@ -15,7 +16,11 @@ process.on("message", async (m) => {
     const p = requests.get(m.id);
     if (p) {
       requests.delete(m.id);
-      m.error ? p.reject(Error(m.error)) : p.resolve(m.result);
+      if (m.error) p.reject(Error(m.error));
+      else {
+        try { p.resolve(serializeToolResult(m.result, text => model.tokenize(text))); }
+        catch (error) { p.reject(error); }
+      }
     }
     return;
   }

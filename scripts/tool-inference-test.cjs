@@ -22,7 +22,7 @@ const { readWord } = require("../src/documents.cjs");
     const project = await projects.create("Tool verification");
     project.tools.documents = true;
     await projects.save(project);
-    let calls = 0;
+    let calls = 0, observations = 0;
     const tools = new Tools({projects,approve:async request=>{
       assert.equal(request.name,"create_word");calls++;return true;
     }});
@@ -47,9 +47,16 @@ const { readWord } = require("../src/documents.cjs");
       const onMessage=async m=>{
         if(m.type==='tool'){
           try {
-            assert.equal(m.name,'create_word');assert.equal(m.args.path,'proof.docx');
-            const result=await tools.run(project.id,m.name,m.args);
-            child.send({type:'tool-result',id:m.id,result:JSON.stringify(result)});
+            let result;
+            if(m.name==='observe_screen') {
+              observations++;
+              result={width:1920,height:1080,text:'Large native OCR result '.repeat(1000),
+                words:Array.from({length:300},(_,i)=>({text:'word-'+i,x:i,y:i+20,confidence:99}))};
+            } else {
+              assert.equal(m.name,'create_word');assert.equal(m.args.path,'proof.docx');
+              result=await tools.run(project.id,m.name,m.args);
+            }
+            child.send({type:'tool-result',id:m.id,result});
           } catch(error){finish(error);}
         } else if(m.type==='error')finish(Error(m.error));
         else if(m.type==='done')finish(null,m.text);
@@ -66,6 +73,15 @@ const { readWord } = require("../src/documents.cjs");
     });
     assert.ok(calls>0,'The real model must invoke the actual document tool.');
     assert.ok(JSON.stringify(readWord(await fs.readFile(path.join(projects.folder(project.id),'files','proof.docx')))).includes('Local tools work.'));
+    phase='large OCR tool result';chunks=0;
+    const observed=await prompt({
+      modelPath:store.location(MODELS[0]),
+      tools:tools.definitions({...project,tools:{...project.tools,computer:true}}).filter(t=>['observe_screen','click_screen','type_text','press_key'].includes(t.name)),
+      system:'You are a local desktop assistant. Use observe_screen when asked. After receiving its result, answer briefly. /no_think',
+      text:'Call observe_screen now. After it succeeds, reply Observed. Do not call any input tools.'
+    });
+    assert.ok(observations>0,'The real model must request the oversized screen observation.');
+    assert.ok(observed.trim(),'The worker must complete after the oversized OCR result, without context overflow.');
     const alternate=path.join(dir,'verified-weight-alias.gguf');
     try {await fs.link(store.location(MODELS[0]),alternate);} catch(error){if(error.code!=='EXDEV')throw error;await fs.copyFile(store.location(MODELS[0]),alternate);}
     for(let iteration=0;iteration<5;iteration++){
@@ -77,8 +93,8 @@ const { readWord } = require("../src/documents.cjs");
     assert.equal(runtime?.electron,require('electron/package.json').version,'Use the exact Electron runtime shipped with Companion.');
     assert.equal(Number(runtime.node.split('.')[0]),24,'Qualify the embedded Node major used by the app.');
     await fs.mkdir('.validation',{recursive:true});
-    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,completedModelReloads:5,runtimeInitializations,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
-    console.log('PASS: actual Electron worker completed document tool, full responses and five native model unload/reload cycles.');
+    await fs.writeFile(path.join('.validation',`worker-lifetimes-${process.platform}-${process.arch}-${process.env.COMPANION_EXECUTABLE_PATH?'packaged':'development'}.json`),JSON.stringify({platform:process.platform,arch:process.arch,workerNode:runtime.node,electron:runtime.electron,toolCalls:calls,oversizedOcrObservations:observations,completedModelReloads:5,runtimeInitializations,packaged:Boolean(process.env.COMPANION_EXECUTABLE_PATH)},null,2)+'\n');
+    console.log('PASS: actual Electron worker completed document tool, full responses, bounded oversized OCR and five native model unload/reload cycles.');
   } finally {
     const tree=lifecycle.captureTree(owned);
     if(child && child.exitCode===null && child.signalCode===null){
