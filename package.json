@@ -1,7 +1,7 @@
 {
   "name": "matiq-companion",
   "productName": "MatiQ Companion",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "A local AI workspace by MatiQ Solutions.",
   "author": "MatiQ Inc",
@@ -20,9 +20,13 @@
     "package:release": "npm run native:build && node scripts/release.cjs",
     "test:signatures": "node scripts/verify-mac-signing.mjs",
     "test:upgrade": "node scripts/upgrade-test.cjs",
-    "native:build": "node scripts/build-computer.cjs"
+    "native:build": "node scripts/build-computer.cjs",
+    "tool:package": "node scripts/package-tool.cjs",
+    "test:suite": "node scripts/suite-test.cjs"
   },
   "dependencies": {
+    "@matiq-solutions/runtime": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.3/matiq-solutions-runtime-0.1.3.tgz",
+    "@matiq-solutions/shell": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.3/matiq-solutions-shell-0.1.3.tgz",
     "@tesseract.js-data/eng": "1.0.0",
     "@xmldom/xmldom": "0.9.12",
     "adm-zip": "0.6.1",
@@ -33,12 +37,13 @@
     "tesseract.js": "6.0.1"
   },
   "devDependencies": {
+    "@matiq-solutions/sdk": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.3/matiq-solutions-sdk-0.1.3.tgz",
+    "@nut-tree-fork/nut-js": "4.2.6",
     "electron": "45.2.3",
     "electron-builder": "26.18.0",
-    "playwright": "1.64.1",
     "js-yaml": "4.3.2",
-    "@nut-tree-fork/nut-js": "4.2.6",
-    "node-gyp": "12.4.0"
+    "node-gyp": "12.4.0",
+    "playwright": "1.64.1"
   },
   "build": {
     "appId": "com.matiq.companion",
@@ -48,7 +53,8 @@
       "package.json",
       "LICENSE",
       "NOTICE",
-      "docs/MODELS.md"
+      "docs/MODELS.md",
+      "matiq-tool.json"
     ],
     "asarUnpack": [
       "node_modules/node-llama-cpp/**/*",

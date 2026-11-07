@@ -10,7 +10,6 @@ const fs = require("node:fs/promises");
 const path = require("node:path");
 const { fork } = require("node:child_process");
 const { randomUUID } = require("node:crypto");
-const { pathToFileURL } = require("node:url");
 const { Projects, atomicJSON } = require("./projects.cjs");
 const { ModelStore, sharedRoot } = require("./models.cjs");
 const { MODELS } = require("./catalog.cjs");
@@ -19,18 +18,10 @@ const { Tools } = require("./tools.cjs");
 const { createComputer } = require("./computer.cjs");
 const { computerAccess, requestComputerAccess } = require("./computer-access.cjs");
 const { configureUpdates } = require("./updates.cjs");
-if (process.env.COMPANION_TEST_PROFILE) {
-  app.setPath("userData", path.resolve(process.env.COMPANION_TEST_PROFILE));
-}
-app.setName("MatiQ Companion");
-if (!app.requestSingleInstanceLock()) {
-  app.exit(0);
-}
-app.on("second-instance", () => {
-  window?.show();
-  window?.focus();
-});
+
+async function createTool({host} = {}) {
 let window,
+  contents,
   projects,
   models,
   settings,
@@ -42,9 +33,12 @@ let window,
   updates;
 const approvals = new Map();
 let runtime = null;
+let persisting = 0;
+let standaloneClosing=false;
+const standaloneRequests=new Set();
 const emit = (event) => {
   if (window && !window.isDestroyed())
-    window.webContents.send("companion:event", event);
+    contents.send("companion:event", event);
 };
 async function state() {
   const h = await hardware(models.root);
@@ -59,7 +53,8 @@ async function state() {
     statuses.push({ ...model, installed });
   }
   return {
-    version: app.getVersion(),
+    version: host?.manifest.version || app.getVersion(),
+    applicationName: app.getName(),
     hardware: h,
     recommended: recommend(h, MODELS),
     models: statuses,
@@ -70,7 +65,7 @@ async function state() {
     projects: await projects.list(),
     runtime,
     updates: updates.state,
-    busy: Boolean(active),
+    busy: Boolean(active || persisting),
     downloading: Boolean(download),
   };
 }
@@ -144,7 +139,7 @@ function startWorker() {
       }
     } else if (m.type === "done" || m.type === "error") {
       const turn = active;
-      active = null;
+      persisting++;
       clearTimeout(turn.timer);
       try {
         const p = await projects.update(turn.project, (p) => {
@@ -156,10 +151,12 @@ function startWorker() {
             at: new Date().toISOString(),
           });
         });
+        if(active===turn)active=null;
         emit({ type: "chat.finished", project: p.id, error: m.error });
       } catch (e) {
+        if(active===turn)active=null;
         emit({ type: "fatal", error: e.message });
-      }
+      } finally {persisting--;}
     }
   });
   worker.on("exit", (code, signal) => {
@@ -285,7 +282,7 @@ async function request(name, args = {}) {
       return true;
     }
     case "chat.send": {
-      if (active) throw Error("Wait for this response or stop it first.");
+      if (active || persisting) throw Error("Wait for this response or stop it first.");
       const p = await projects.get(args.id);
       if (
         typeof args.text !== "string" ||
@@ -345,16 +342,16 @@ function cancel() {
     }, 2000);
   }
 }
-app
-  .whenReady()
-  .then(async () => {
-    const dir = app.getPath("userData");
+
+    await app.whenReady();
+
+    const dir = host?.dataDir || app.getPath("userData");
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     projects = new Projects(path.join(dir, "projects"));
     models = new ModelStore(
-      process.env.COMPANION_TEST_PROFILE
+      host?.sharedModelRoot || (process.env.COMPANION_TEST_PROFILE
         ? path.join(dir, "test-models")
-        : sharedRoot(),
+        : sharedRoot()),
     );
     await fs.mkdir(models.root, { recursive: true, mode: 0o700 });
     settingsFile = path.join(dir, "settings.json");
@@ -364,10 +361,10 @@ app
       if (e.code !== "ENOENT") throw e;
       settings = { model: null };
     }
-    session.defaultSession.setPermissionRequestHandler(
+    (host?.session || session.defaultSession).setPermissionRequestHandler(
       (_wc, _permission, callback) => callback(false),
     );
-    window = new BrowserWindow({
+    window = host?.window || new BrowserWindow({
       width: 1160,
       height: 820,
       minWidth: 840,
@@ -380,35 +377,77 @@ app
         sandbox: true,
       },
     });
-    window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
-    window.webContents.on("will-navigate", (e) => e.preventDefault());
+    contents = host?.view.webContents || window.webContents;
+    contents.setWindowOpenHandler(() => ({ action: "deny" }));
+    contents.on("will-navigate", (e) => e.preventDefault());
     tools = new Tools({
       projects,
       approve,
       computer: createComputer(window),
-      protectedRoots: [app.getAppPath(), models.root],
+      protectedRoots: [app.getAppPath(), models.root, path.join(app.getPath("appData"),"MatiQ Solutions","tool-locks"), ...(host?.protectedRoots || [])],
     });
-    updates = configureUpdates(app, emit);
-    ipcMain.handle("companion:request", async (event, name, args) => {
-      if (
-        event.sender !== window.webContents ||
-        event.senderFrame !== window.webContents.mainFrame ||
-        event.senderFrame.url !==
-          pathToFileURL(path.join(__dirname, "ui/index.html")).href
-      )
-        throw Error("Requests are accepted only from the trusted app window.");
-      return request(name, args);
-    });
-    await window.loadFile(path.join(__dirname, "ui/index.html"));
-  })
-  .catch((e) => {
-    dialog.showErrorBox("MatiQ Companion could not start", e.message);
-    app.quit();
+    updates = host ? {
+      state: {status: 'suite',version:host.manifest.version,message:'Manage this tool in MatiQ Solutions → Downloads & updates.'},
+      check: async () => updates.state,
+      download: async () => {throw Error('Download tool updates from MatiQ Solutions → Downloads & updates.');},
+      install: () => {throw Error('Restart from MatiQ Solutions when all active work is finished.');}
+    } : configureUpdates(app, emit);
+    if (host) host.handle('companion:request', request);
+    else {
+      const requireFrame=require('@matiq-solutions/runtime/trusted-frame.cjs').frameGuard(contents,path.join(__dirname,'ui/index.html'));
+      ipcMain.handle("companion:request", async (event, name, args) => {
+      await requireFrame(event);
+      if(standaloneClosing)throw Error('Companion is closing. Reopen it before starting more work.');
+      const pending=Promise.resolve().then(()=>request(name,args));standaloneRequests.add(pending);
+      try{return await pending;}finally{standaloneRequests.delete(pending);}
+      });
+    }
+    await contents.loadFile(path.join(__dirname, "ui/index.html"));
+    if(!host)await require("@matiq-solutions/shell").apply(contents);
+    return {
+      window,
+      async status() {
+        const draft = !contents.isDestroyed() && await contents.executeJavaScript("Boolean(document.querySelector('#message')?.value.trim())");
+        return {busy:Boolean(active || persisting || download || approvals.size || draft),reason:persisting?'saving the response':active?'generating a response':download?'downloading a model':approvals.size?'waiting for approval':draft?'send or clear your draft message':''};
+      },
+      async prepareClose() {
+        let timer;
+        try{
+          await Promise.race([Promise.allSettled([...standaloneRequests]),new Promise(resolve=>{timer=setTimeout(resolve,1000);})]);
+          if(standaloneRequests.size)throw Error('Wait for the current Companion request to finish.');
+          const state=await this.status();if(state.busy)throw Error('Finish Companion work before quitting: '+state.reason);
+          if(standaloneRequests.size)throw Error('Wait for the current Companion request to finish.');
+          standaloneClosing=true;
+        }finally{clearTimeout(timer);}
+      },
+      resume(){standaloneClosing=false;},
+      async dispose() {
+        download?.abort(); active?.abort.abort();
+        for (const resolve of approvals.values()) resolve(false);
+        if (worker) {const child=worker;await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Inference worker did not stop. Inspect the owned worker before closing.')),5000);child.once('exit',()=>{clearTimeout(timer);resolve();});child.kill();});}
+        if(!host)ipcMain.removeHandler('companion:request');
+      }
+    };
+
+}
+
+async function launch() {
+  if(process.env.COMPANION_TEST_PROFILE)app.setPath('userData',path.resolve(process.env.COMPANION_TEST_PROFILE));
+  app.setName('MatiQ Companion');
+  if(!app.requestSingleInstanceLock()){app.exit(0);return;}
+  await app.whenReady();
+  const lease=await require('@matiq-solutions/runtime/tool-lease.cjs').acquireToolLease({root:path.join(app.getPath('appData'),'MatiQ Solutions','tool-locks'),id:'com.matiq.companion',owner:app.getName()});
+  let tool;
+  try{tool=await createTool();}catch(error){await lease.release();throw error;}
+  let quitting=false,checking=false;
+  app.on('second-instance',()=>{tool.window.show();tool.window.focus();});
+  tool.window.on('close',event=>{if(!quitting){event.preventDefault();app.quit();}});
+  app.on('window-all-closed',()=>app.quit());
+  app.on('before-quit',event=>{
+    if(quitting)return;event.preventDefault();if(checking)return;checking=true;
+    (async()=>{await tool.window.webContents.executeJavaScript('document.documentElement.inert=true');await tool.prepareClose();await tool.dispose();await lease.release();quitting=true;app.quit();})().catch(async error=>{tool.resume();let detail=error.message;try{if(!tool.window.isDestroyed())await tool.window.webContents.executeJavaScript('document.documentElement.inert=false');}catch(restoreError){detail+=' Window recovery failed: '+restoreError.message;}dialog.showErrorBox('Companion could not close',detail);}).finally(()=>{checking=false;});
   });
-app.on("window-all-closed", () => app.quit());
-app.on("before-quit", () => {
-  download?.abort();
-  active?.abort.abort();
-  for (const resolve of approvals.values()) resolve(false);
-  worker?.kill();
-});
+  return tool;
+}
+if(app.getAppPath()===path.resolve(__dirname,'..'))launch().catch(error=>{dialog.showErrorBox('MatiQ Companion could not start',error.message);app.quit();});
+module.exports={launch,createTool};

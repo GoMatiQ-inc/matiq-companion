@@ -12,6 +12,9 @@ test('Mac publication combines qualified architectures and refuses altered insta
   const data={[pkg]:Buffer.from('installer-'+arch),[zip]:bytes,'latest-mac.yml':Buffer.from(yaml.dump(metadata))};
   const assets={};for(const [name,body] of Object.entries(data)){await fs.writeFile(path.join(dir,name),body);assets[name]=createHash('sha256').update(body).digest('hex');}
   await fs.writeFile(path.join(dir,'mac-signature.json'),JSON.stringify({version:'0.1.1',arch,platform:'darwin',artifact:pkg,signed:true,notarized:true,stapled:true,assets,sha256:assets[pkg]}));
+  const tool=`MatiQ-Companion-0.1.1-darwin-${arch}.mqt`,toolData={[tool]:Buffer.from('qualified-tool-'+arch),[tool+'.release.json']:Buffer.from('qualified-descriptor-'+arch)},toolArtifacts={};
+  for(const [name,body] of Object.entries(toolData)){await fs.writeFile(path.join(dir,name),body);toolArtifacts[name]=createHash('sha256').update(body).digest('hex');}
+  await fs.writeFile(path.join(dir,'suite-proof.json'),JSON.stringify({version:'0.1.1',target:'darwin-'+arch,packageSha256:toolArtifacts[tool],artifacts:toolArtifacts,checks:['trusted-native-package','explicit-install','real-native-inference','retained-workspace','host-owned-updates']}));
   const retained={project:true,settings:true,modelSha256:true,generatedFile:true};
   const proof={arch,installation:'system-pkg',nativeAdministratorAuthorization:true,baseVersion:'0.1.1',signedDownloadRestart:true,automaticRelaunch:true,retained,baseZipSha256:assets[zip]};
   await fs.writeFile(path.join(dir,'upgrade-proof.json'),JSON.stringify(proof));
@@ -30,6 +33,7 @@ test('Mac publication combines qualified architectures and refuses altered insta
  await fs.writeFile(previousFile,JSON.stringify({...previous,updateFeedSha256:'0'.repeat(64)}));
  await assert.rejects(prepareMacRelease(input,path.join(root,'wrong-feed'),'0.1.1'),/same combined feed/);
  await fs.writeFile(previousFile,JSON.stringify(previous));
+ const toolPath=path.join(input,'x64','MatiQ-Companion-0.1.1-darwin-x64.mqt'),originalTool=await fs.readFile(toolPath);await fs.writeFile(toolPath,'tampered');await assert.rejects(prepareMacRelease(input,path.join(root,'bad-tool'),'0.1.1'),/Unverified suite tool bytes/);await fs.writeFile(toolPath,originalTool);
  await fs.writeFile(path.join(input,'x64','MatiQ-Companion-0.1.1-mac-x64.pkg'),'tampered');
  await assert.rejects(prepareMacRelease(input,path.join(root,'bad'),'0.1.1'),/Unverified artifact bytes/);
  await assert.rejects(fs.stat(path.join(root,'bad')),{code:'ENOENT'});
