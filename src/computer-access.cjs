@@ -1,4 +1,4 @@
-const { systemPreferences, desktopCapturer, shell } = require("electron");
+const { app, systemPreferences, desktopCapturer, shell } = require("electron");
 function computerAccess() {
   const native=process.platform === "darwin" ? require("./native/mac-computer.node").access() : null;
   return process.platform === "darwin"
@@ -8,8 +8,11 @@ function computerAccess() {
 async function requestComputerAccess(kind) {
   if (process.platform !== "darwin") throw Error("Windows desktop access is available for normal desktop apps; elevated and secure windows are excluded.");
   if (kind === "screen") {
-    await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } });
+    let captureError;
+    try { await desktopCapturer.getSources({ types: ["screen"], thumbnailSize: { width: 1, height: 1 } }); }
+    catch (error) { captureError = error; }
     await shell.openExternal("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture");
+    if (captureError) throw Error(`Screen capture could not start: ${captureError.message} Enable ${app.getName()} in the Screen Recording settings that opened, then quit and reopen the app.`);
   } else if (kind === "input") {
     systemPreferences.isTrustedAccessibilityClient(true);
     require("./native/mac-computer.node").requestEvents();
