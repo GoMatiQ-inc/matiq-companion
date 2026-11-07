@@ -37,3 +37,7 @@ Both apps use a typed MatiQ model-store layout. Shared artifacts are identified 
 ## License
 
 [The MatiQ Companion No-Sale License](LICENSE) matches the current MatiQ Voice terms: source is available for personal and internal business use, with no paid resale/hosting/bundling. These are source-available terms, not an OSI-approved open-source license. Model weights and third-party dependencies retain their own licenses. The MatiQ Solutions wordmark is owned by MatiQ Inc; see [NOTICE](NOTICE).
+
+## UI prototype
+
+The repository-owned [prototype](prototype/README.md) reuses this app’s existing renderer and exact shared shell in standalone and suite modes. Iterate there and obtain explicit owner approval before applying a design. Native operations use sample state in the preview; browser qualification is separate from native acceptance.

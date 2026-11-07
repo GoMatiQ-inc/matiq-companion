@@ -23,7 +23,8 @@
     "native:build": "node scripts/build-computer.cjs",
     "tool:package": "node scripts/package-tool.cjs",
     "test:suite": "node scripts/suite-test.cjs",
-    "icons:build": "electron scripts/build-icons.cjs"
+    "icons:build": "electron scripts/build-icons.cjs",
+    "prototype": "npx --yes --package=https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.4/matiq-solutions-sdk-0.1.4.tgz matiq-tool prototype build"
   },
   "dependencies": {
     "@matiq-solutions/runtime": "https://github.com/GoMatiQ-inc/matiq-solutions/releases/download/sdk-v0.1.3/matiq-solutions-runtime-0.1.3.tgz",
