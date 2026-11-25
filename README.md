@@ -1,4 +1,8 @@
+<p><a href="https://matiqinc.com"><img src="https://raw.githubusercontent.com/GoMatiQ-inc/.github/main/assets/github-banner.svg" alt="MatiQ Inc. Progress has a purpose." width="880"></a></p>
+
 # MatiQ Companion
+
+[MatiQ Inc](https://matiqinc.com) · [Downloads](https://github.com/GoMatiQ-inc/matiq-companion/releases) · [Documentation](docs/VALIDATION.md) · [Report an issue](https://github.com/GoMatiQ-inc/matiq-companion/issues) · [License](LICENSE)
 
 A local desktop AI workspace by MatiQ Solutions, in the MatiQ Tools family. Download a verified model, chat on your own hardware, and choose which tools each conversation may use.
 
@@ -23,6 +27,12 @@ For later releases, use **Settings → Check for updates → Download update →
 - Optional public web search/page reading. Queries and requested pages leave the device only when approved. Public search providers may rate-limit or block requests.
 - Experimental, separately enabled computer observation and input: local OCR on the primary display and approval for each capture, click, key or text action. macOS Accessibility/Screen Recording permissions are required. Computer control can reach outside granted folders; enable it only with that understanding.
 - Installed releases can check GitHub, download an update and restart to install it. Model/project storage lives outside the application bundle.
+
+## Part of MatiQ Solutions
+
+**Useful software. Made by MatiQ.** Use this app on its own, or explore the [MatiQ Solutions desktop suite](https://github.com/GoMatiQ-inc/matiq-solutions). The family also includes [Voice](https://github.com/GoMatiQ-inc/matiq-voice) for local dictation and meeting notes, and [CopyCat](https://github.com/GoMatiQ-inc/matiq-copycat) for illustrated workflow guides.
+
+[MatiQ Inc](https://matiqinc.com) builds businesses and technology for a better quality of life. For product problems, use this repository's issues; for business inquiries, [talk with us](mailto:hello@matiqinc.com).
 
 ## Development
 
